@@ -1,0 +1,44 @@
+name: CI/CD Blackjack Science Lab
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  test-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js v22
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run unit & integration tests
+      run: npm run test
+
+    - name: Execute test CLI simulation to database
+      run: npm run simulate -- --hands 2000 --db ci_results.db
+
+    - name: Build React application
+      run: npm run build
+
+    # Opcional: Despliegue en GitHub Pages si el usuario tiene configurada la rama gh-pages
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./dist
