@@ -21,7 +21,7 @@ export async function getSqlEngine() {
     } else {
       // Navegador - carga desde CDN oficial para evitar complejidad de assets locales
       SQL = await initSqlJs({
-        locateFile: (file) => `https://sql.js.org/dist/${file}`
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/${file}`
       });
     }
   }
