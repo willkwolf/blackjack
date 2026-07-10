@@ -19,10 +19,20 @@ export async function getSqlEngine() {
       const wasmBinary = new Uint8Array(fs.readFileSync(wasmPath));
       SQL = await initSqlJs({ wasmBinary: wasmBinary as any });
     } else {
-      // Navegador - carga desde CDN oficial para evitar complejidad de assets locales
-      SQL = await initSqlJs({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/${file}`
-      });
+      // Navegador - carga local con fallback a CDN (redundante y resiliente)
+      const baseUrl = import.meta.env.BASE_URL || '/';
+      try {
+        SQL = await initSqlJs({
+          locateFile: (file) => `${baseUrl}${file}`
+        });
+        console.log('✅ SQLite Wasm cargado localmente con éxito.');
+      } catch (err) {
+        console.warn('⚠️ Fallo al cargar SQLite Wasm localmente. Usando fallback de CDN...', err);
+        SQL = await initSqlJs({
+          locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/${file}`
+        });
+        console.log('✅ SQLite Wasm cargado desde CDN como fallback.');
+      }
     }
   }
   return SQL;
