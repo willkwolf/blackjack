@@ -85,14 +85,15 @@ describe('AI Modules Tests (RL & GA)', () => {
 
     it('should mutate chromosomes within parameters', () => {
       const chrom = createDefaultChromosome();
-      const originalHard = [...chrom.hard['16']];
+      const originalJson = JSON.stringify(chrom);
       
-      // Mutar con 100% de probabilidad
-      mutateChromosome(chrom, 1.0);
+      // Mutar múltiples veces ya que la tasa por gen es del 4%
+      for (let i = 0; i < 20; i++) {
+        mutateChromosome(chrom, 1.0);
+      }
       
-      // Debería cambiar la matriz de jugadas
-      const isDifferent = chrom.hard['16'].some((act, idx) => act !== originalHard[idx]);
-      expect(isDifferent).toBe(true);
+      // Debería cambiar al menos alguna celda en todo el cromosoma
+      expect(JSON.stringify(chrom)).not.toBe(originalJson);
     });
 
     it('should evaluate fitness and run genetic generation', () => {
@@ -128,6 +129,17 @@ describe('AI Modules Tests (RL & GA)', () => {
         // En mano suave 20, solo se permite H o S (no D)
         expect(['H', 'S']).toContain(chrom.soft['20'][0]);
       }
+    });
+
+    it('should apply adaptive mutation decay based on generation index', () => {
+      const chrom = createDefaultChromosome();
+      const original = cloneChromosome(chrom);
+      
+      // Mutar en la generación final (10 de 10) donde decayFactor y probabilidad global son mínimos
+      mutateChromosome(chrom, 0.2, 10, 10);
+      
+      // Debería permanecer idéntico debido al decaimiento de mutación
+      expect(chrom).toEqual(original);
     });
   });
 

@@ -12,7 +12,7 @@ function App() {
   const [db, setDb] = useState<any>(null);
   const [activeStrategy, setActiveStrategy] = useState<Chromosome | null>(null);
   const [strategySource, setStrategySource] = useState<'goykhman' | 'buramdoyal' | 'taylor' | 'custom'>('taylor');
-  const [activeRules] = useState<RulesConfig>(DEFAULT_RULES);
+  const [activeRules, setActiveRules] = useState<RulesConfig>(DEFAULT_RULES);
   const [dbLoading, setDbLoading] = useState(true);
 
   // Inicializar base de datos en memoria y estrategia por defecto
@@ -123,6 +123,7 @@ function App() {
             activeStrategy={activeStrategy}
             setActiveStrategy={setActiveStrategy}
             activeRules={activeRules}
+            setActiveRules={setActiveRules}
           />
         )}
         {activeTab === 'trainer' && (

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Download, Cpu, Play } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Chromosome, runGeneticGeneration, initializePopulation } from '../../simulator/core/GeneticEngine.ts';
+import { Chromosome, runGeneticGeneration, initializePopulation, createDefaultChromosome } from '../../simulator/core/GeneticEngine.ts';
 import { RulesConfig, BettingProgressionConfig } from '../../simulator/core/defaultStrategy.ts';
 import { runMonteCarlo, SimulationResult } from '../../simulator/core/MonteCarloSimulation.ts';
 import { saveStrategy, saveSimulation } from '../../db/database.ts';
@@ -11,13 +11,15 @@ interface DashboardProps {
   activeStrategy: Chromosome;
   setActiveStrategy: (strat: Chromosome) => void;
   activeRules: RulesConfig;
+  setActiveRules: (rules: RulesConfig) => void;
 }
 
 export default function Dashboard({
   db,
   activeStrategy,
   setActiveStrategy,
-  activeRules
+  activeRules,
+  setActiveRules
 }: DashboardProps) {
   // Configuración de simulación
   const [hands, setHands] = useState(50000);
@@ -27,6 +29,9 @@ export default function Dashboard({
 
   // Configuración de optimización genética
   const [generations, setGenerations] = useState(10);
+  const [popSize, setPopSize] = useState(15);
+  const [mutationRate, setMutationRate] = useState(0.15);
+  const [handsPerEval, setHandsPerEval] = useState(2000);
   const [optimizing, setOptimizing] = useState(false);
   const [optProgress, setOptProgress] = useState(0);
 
@@ -90,14 +95,10 @@ export default function Dashboard({
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     try {
-      const popSize = 15;
-      const mutationRate = 0.15;
-      const handsPerEval = 1500;
-
       let pop = initializePopulation(popSize, activeStrategy, mutationRate);
 
       for (let gen = 1; gen <= generations; gen++) {
-        pop = runGeneticGeneration(pop, activeRules, bankroll, handsPerEval, mutationRate);
+        pop = runGeneticGeneration(pop, activeRules, bankroll, handsPerEval, mutationRate, gen, generations);
         setOptProgress(Math.round((gen / generations) * 100));
         await new Promise((resolve) => setTimeout(resolve, 30)); // Ceder el paso a la UI
       }
@@ -143,6 +144,30 @@ export default function Dashboard({
     const nextIdx = (list.indexOf(current) + 1) % list.length;
     updated[type][key][colIdx] = list[nextIdx];
     setActiveStrategy(updated);
+  };
+
+  // Restablece la estrategia a la básica de Taylor
+  const handleResetStrategy = () => {
+    if (window.confirm('¿Estás seguro de que deseas restablecer la estrategia activa a la Estrategia Básica (Exacta)?')) {
+      setActiveStrategy(createDefaultChromosome(baseBet));
+      alert('Estrategia restablecida a la básica matemática.');
+    }
+  };
+
+  // Limpia el historial de simulaciones en SQLite
+  const handleClearHistory = () => {
+    if (window.confirm('¿Estás seguro de que deseas borrar todo el historial de simulaciones en la base de datos local SQLite?')) {
+      try {
+        db.run('DELETE FROM hand_histories;');
+        db.run('DELETE FROM simulations;');
+        db.run('DELETE FROM strategies WHERE id NOT LIKE "gui-strat%";');
+        setSimResult(null);
+        alert('Historial borrado de la base de datos.');
+      } catch (err) {
+        console.error(err);
+        alert('Error al borrar el historial.');
+      }
+    }
   };
 
   return (
@@ -203,6 +228,58 @@ export default function Dashboard({
           </select>
         </div>
 
+        {/* Reglas de la Mesa */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <h3 style={{ color: 'var(--gold)', fontSize: '1.0rem', marginBottom: '5px' }}>🃏 Reglas de la Mesa</h3>
+          
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Mazos (Decks)</label>
+            <select 
+              value={activeRules.decks} 
+              onChange={(e) => setActiveRules({ ...activeRules, decks: parseInt(e.target.value) })}
+              style={{ width: '120px', padding: '5px', background: '#07180e', color: '#fff', border: '1px solid var(--felt-border)', borderRadius: '4px', fontSize: '0.8rem' }}
+            >
+              <option value={1}>1 Mazo</option>
+              <option value={2}>2 Mazos</option>
+              <option value={4}>4 Mazos</option>
+              <option value={6}>6 Mazos</option>
+              <option value={8}>8 Mazos</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Soft 17 Rule</label>
+            <select 
+              value={activeRules.dealerHitSoft17 ? 'H17' : 'S17'} 
+              onChange={(e) => setActiveRules({ ...activeRules, dealerHitSoft17: e.target.value === 'H17' })}
+              style={{ width: '120px', padding: '5px', background: '#07180e', color: '#fff', border: '1px solid var(--felt-border)', borderRadius: '4px', fontSize: '0.8rem' }}
+            >
+              <option value="S17">Stand S17</option>
+              <option value="H17">Hit H17</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Permitir Rendición</label>
+            <input 
+              type="checkbox" 
+              checked={activeRules.surrenderAllowed} 
+              onChange={(e) => setActiveRules({ ...activeRules, surrenderAllowed: e.target.checked })}
+              style={{ accentColor: 'var(--gold)' }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Doblar tras Split (DAS)</label>
+            <input 
+              type="checkbox" 
+              checked={activeRules.dasAllowed} 
+              onChange={(e) => setActiveRules({ ...activeRules, dasAllowed: e.target.checked })}
+              style={{ accentColor: 'var(--gold)' }}
+            />
+          </div>
+        </div>
+
         <button 
           onClick={handleSimulate} 
           disabled={simulating || optimizing}
@@ -224,8 +301,47 @@ export default function Dashboard({
               onChange={(e) => setGenerations(parseInt(e.target.value))}
               style={{ width: '100%', padding: '10px', background: '#07180e', color: '#fff', border: '1px solid var(--felt-border)', borderRadius: '6px' }}
               min="2"
-              max="50"
+              max="100"
             />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '15px' }}>
+            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tamaño Población</label>
+            <input 
+              type="number" 
+              value={popSize} 
+              onChange={(e) => setPopSize(parseInt(e.target.value))}
+              style={{ width: '100%', padding: '10px', background: '#07180e', color: '#fff', border: '1px solid var(--felt-border)', borderRadius: '6px' }}
+              min="4"
+              max="100"
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '15px' }}>
+            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Tasa Mutación Base ({Math.round(mutationRate * 100)}%)</label>
+            <input 
+              type="range" 
+              value={mutationRate} 
+              onChange={(e) => setMutationRate(parseFloat(e.target.value))}
+              style={{ width: '100%', accentColor: 'var(--gold)', background: 'none' }}
+              min="0.05"
+              max="0.50"
+              step="0.01"
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+            <label style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Manos por Evaluación</label>
+            <select 
+              value={handsPerEval} 
+              onChange={(e) => setHandsPerEval(parseInt(e.target.value))}
+              style={{ width: '100%', padding: '10px', background: '#07180e', color: '#fff', border: '1px solid var(--felt-border)', borderRadius: '6px' }}
+            >
+              <option value={1000}>1,000 Manos</option>
+              <option value={2000}>2,000 Manos</option>
+              <option value={5000}>5,000 Manos</option>
+              <option value={10000}>10,000 Manos</option>
+            </select>
           </div>
 
           <button 
@@ -246,6 +362,24 @@ export default function Dashboard({
         >
           <Download size={18} /> Descargar SQLite .db
         </button>
+
+        {/* Restablecer / Limpiar */}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+          <button 
+            onClick={handleResetStrategy}
+            className="casino-btn btn-surrender"
+            style={{ flex: 1, justifyContent: 'center', padding: '8px', fontSize: '0.8rem' }}
+          >
+            Restablecer Estrat.
+          </button>
+          <button 
+            onClick={handleClearHistory}
+            className="casino-btn"
+            style={{ flex: 1, justifyContent: 'center', padding: '8px', fontSize: '0.8rem', background: '#3d0a14', border: '1px solid #ff1744', color: '#ff1744' }}
+          >
+            Borrar Historial
+          </button>
+        </div>
       </aside>
 
       {/* Panel de Resultados */}

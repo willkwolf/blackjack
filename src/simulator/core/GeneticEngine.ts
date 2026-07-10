@@ -105,7 +105,28 @@ export function initializePopulation(
 }
 
 // Mutación de un cromosoma respetando las reglas de Blackjack
-export function mutateChromosome(chrom: Chromosome, mutationRate: number) {
+export function mutateChromosome(
+  chrom: Chromosome, 
+  baseMutationRate: number,
+  generation: number = 1,
+  totalGenerations: number = 10
+) {
+  // Coeficiente de decaimiento lineal para enfriamiento (annealing)
+  const decayFactor = Math.max(0.05, 1 - ((generation - 1) / totalGenerations));
+  
+  // Probabilidad de que este cromosoma mute (probabilidad global de mutación)
+  const chromMutationProb = baseMutationRate * decayFactor;
+
+  // Si no se supera la probabilidad global de mutación, el cromosoma no se muta en absoluto
+  // (Nota: para la generación 1 permitimos mutar siempre para introducir diversidad inicial)
+  if (generation > 1 && Math.random() > chromMutationProb) {
+    return;
+  }
+
+  // Probabilidad de mutar una celda individual (gen).
+  // La mantenemos baja para no destruir la estructura acumulada
+  const geneMutationProb = Math.max(0.01, 0.04 * decayFactor);
+
   // Mutar manos duras
   for (const val of Object.keys(chrom.hard)) {
     const valNum = parseInt(val, 10);
@@ -117,7 +138,7 @@ export function mutateChromosome(chrom: Chromosome, mutationRate: number) {
     }
 
     chrom.hard[val] = chrom.hard[val].map(action => {
-      if (Math.random() < mutationRate) {
+      if (Math.random() < geneMutationProb) {
         return allowedActions[Math.floor(Math.random() * allowedActions.length)];
       }
       return action;
@@ -133,7 +154,7 @@ export function mutateChromosome(chrom: Chromosome, mutationRate: number) {
     }
 
     chrom.soft[val] = chrom.soft[val].map(action => {
-      if (Math.random() < mutationRate) {
+      if (Math.random() < geneMutationProb) {
         return allowedActions[Math.floor(Math.random() * allowedActions.length)];
       }
       return action;
@@ -144,24 +165,25 @@ export function mutateChromosome(chrom: Chromosome, mutationRate: number) {
   const pairActionsList = ['SP', 'H', 'S', 'D', 'SU'];
   for (const rank of Object.keys(chrom.pairs)) {
     chrom.pairs[rank] = chrom.pairs[rank].map(action => {
-      if (Math.random() < mutationRate) {
+      if (Math.random() < geneMutationProb) {
         return pairActionsList[Math.floor(Math.random() * pairActionsList.length)];
       }
       return action;
     });
   }
 
-  // Mutar parámetros de apuestas
-  if (Math.random() < mutationRate) {
+  // Mutar parámetros de apuestas (con menor frecuencia)
+  const betMutationProb = Math.max(0.02, 0.08 * decayFactor);
+  if (Math.random() < betMutationProb) {
     const types: ('FLAT' | 'PAROLI' | 'DSP' | 'KELLY')[] = ['FLAT', 'PAROLI', 'DSP', 'KELLY'];
     chrom.betting.type = types[Math.floor(Math.random() * types.length)];
   }
 
-  if (Math.random() < mutationRate && chrom.betting.maxProgressions !== undefined) {
+  if (Math.random() < betMutationProb && chrom.betting.maxProgressions !== undefined) {
     chrom.betting.maxProgressions = Math.floor(Math.random() * 3) + 2; // 2, 3 o 4
   }
 
-  if (Math.random() < mutationRate && chrom.betting.kellyFraction !== undefined) {
+  if (Math.random() < betMutationProb && chrom.betting.kellyFraction !== undefined) {
     chrom.betting.kellyFraction = Math.max(0.1, Math.min(1.0, chrom.betting.kellyFraction + (Math.random() * 0.4 - 0.2)));
   }
 }
@@ -221,7 +243,9 @@ export function runGeneticGeneration(
   rules: RulesConfig,
   initialBankroll: number,
   handsToSimulate: number,
-  mutationRate: number
+  mutationRate: number,
+  generation: number = 1,
+  totalGenerations: number = 10
 ): Individual[] {
   const popSize = population.length;
 
@@ -257,7 +281,7 @@ export function runGeneticGeneration(
     const parentB = selectParentTournament(population);
     
     let childChromosome = crossoverChromosomes(parentA.chromosome, parentB.chromosome);
-    mutateChromosome(childChromosome, mutationRate);
+    mutateChromosome(childChromosome, mutationRate, generation, totalGenerations);
 
     nextPopulation.push({
       chromosome: childChromosome,

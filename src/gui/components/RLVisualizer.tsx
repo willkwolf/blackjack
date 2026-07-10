@@ -231,7 +231,7 @@ export default function RLVisualizer({
   const renderQMatrix = () => {
     if (!agent) return null;
 
-    const rows = [16, 15, 14, 13, 12, 11, 10, 9, 8];
+    const rows = [20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8];
     const columns = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11]; // 11 = As
 
     return (
