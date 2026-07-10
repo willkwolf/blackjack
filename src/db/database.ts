@@ -21,7 +21,7 @@ export async function getSqlEngine() {
     } else {
       // Navegador - carga local con fallback a CDN (redundante y resiliente)
       const baseUrl = import.meta.env.BASE_URL || '/';
-      const localWasmUrl = `${baseUrl}sql-wasm.wasm`;
+      const localWasmUrl = `${baseUrl}sql-wasm-browser.wasm`;
       
       let useLocal = false;
       try {
