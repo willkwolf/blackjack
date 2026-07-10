@@ -61,7 +61,7 @@ describe('Blackjack Engine Tests', () => {
       const hand = new Hand(2500);
       hand.addCard(new Card('A', '♠'));
       hand.addCard(new Card('A', '♥'));
-      const action = getActionFromStrategy(hand, new Card('10', '♦'), mockStrategy, true);
+      const action = getActionFromStrategy(hand, new Card('10', '♦'), mockStrategy, DEFAULT_RULES);
       expect(action).toBe('SP'); // Siempre dividir ases
     });
 
@@ -70,11 +70,31 @@ describe('Blackjack Engine Tests', () => {
       hand.addCard(new Card('10', '♠'));
       hand.addCard(new Card('6', '♥'));
       
-      const actionVs10 = getActionFromStrategy(hand, new Card('10', '♦'), mockStrategy, true);
+      const actionVs10 = getActionFromStrategy(hand, new Card('10', '♦'), mockStrategy, DEFAULT_RULES);
       expect(actionVs10).toBe('SU'); // Rendirse vs 10
 
-      const actionVs7 = getActionFromStrategy(hand, new Card('7', '♦'), mockStrategy, true);
+      const actionVs7 = getActionFromStrategy(hand, new Card('7', '♦'), mockStrategy, DEFAULT_RULES);
       expect(actionVs7).toBe('H'); // Pedir vs 7
+    });
+
+    it('should fall back to Hit when Surrender is suggested by strategy but disabled in rules', () => {
+      const hand = new Hand(2500);
+      hand.addCard(new Card('10', '♠'));
+      hand.addCard(new Card('6', '♥'));
+
+      const rulesNoSurrender = { ...DEFAULT_RULES, surrenderAllowed: false };
+      const action = getActionFromStrategy(hand, new Card('10', '♦'), mockStrategy, rulesNoSurrender);
+      expect(action).toBe('H'); // Fallback de SU a H en 16 vs 10
+    });
+
+    it('should fall back to Hit when Surrender is suggested but hand has more than 2 cards', () => {
+      const hand = new Hand(2500);
+      hand.addCard(new Card('5', '♠'));
+      hand.addCard(new Card('5', '♥'));
+      hand.addCard(new Card('6', '♦')); // total 16, 3 cartas
+      
+      const action = getActionFromStrategy(hand, new Card('10', '♦'), mockStrategy, DEFAULT_RULES);
+      expect(action).toBe('H'); // Fallback a H
     });
   });
 

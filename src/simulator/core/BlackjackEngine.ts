@@ -136,7 +136,7 @@ export function getActionFromStrategy(
   playerHand: Hand,
   dealerUpcard: Card,
   strategy: { hard: StrategyMatrix; soft: StrategyMatrix; pairs: StrategyMatrix },
-  dasAllowed: boolean
+  rules: RulesConfig
 ): string {
   const dealerIdx = getDealerCardIndex(dealerUpcard);
   const playerValue = playerHand.getValue();
@@ -153,7 +153,7 @@ export function getActionFromStrategy(
     const action = strategy.soft[playerValue]?.[dealerIdx];
     // Si la acción es Doblar (D) pero no se puede, resolver como Hit (H) o Stand (S)
     if (action === 'D') {
-      if (!playerHand.canDouble() || (playerHand.isSplitHand && !dasAllowed)) {
+      if (!playerHand.canDouble() || (playerHand.isSplitHand && !rules.dasAllowed)) {
         // En manos suaves, si no se puede doblar, por lo general se pide (H) excepto en A,7 (18) que se planta (S)
         return playerValue >= 18 ? 'S' : 'H';
       }
@@ -165,14 +165,14 @@ export function getActionFromStrategy(
   if (playerValue >= 5 && playerValue <= 21) {
     const action = strategy.hard[playerValue]?.[dealerIdx];
     if (action === 'D') {
-      if (!playerHand.canDouble() || (playerHand.isSplitHand && !dasAllowed)) {
+      if (!playerHand.canDouble() || (playerHand.isSplitHand && !rules.dasAllowed)) {
         return 'H';
       }
     }
     if (action === 'SU') {
-      if (!playerHand.canDouble()) {
-        // No se puede rendir después de pedir cartas
-        return 'H';
+      if (!rules.surrenderAllowed || !playerHand.canDouble() || playerHand.isSplitHand) {
+        // Si no se permite rendición, cae en pedir (H) excepto en 17+ que se planta (S)
+        return playerValue >= 17 ? 'S' : 'H';
       }
     }
     return action || (playerValue >= 17 ? 'S' : 'H');
@@ -271,7 +271,7 @@ export function playRound(
     }
 
     while (!hand.isStood && !hand.isBusted() && !hand.isSurrendered && hand.getValue() < 21) {
-      const action = getActionFromStrategy(hand, dealerUpcard, strategy, rules.dasAllowed);
+      const action = getActionFromStrategy(hand, dealerUpcard, strategy, rules);
       hand.decisionSequence.push(action);
 
       if (action === 'SP' && hand.isPair()) {

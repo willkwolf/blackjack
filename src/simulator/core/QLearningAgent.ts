@@ -2,6 +2,8 @@
 // Espacio de Estados: (playerValue, dealerUpcardValue, isSoft) -> 360 estados posibles
 // Espacio de Acciones: 0 = 'H' (Hit), 1 = 'S' (Stand), 2 = 'D' (Double), 3 = 'SU' (Surrender)
 
+import { DEFAULT_PAIRS } from './defaultStrategy.ts';
+
 export class QLearningAgent {
   public qTable: { [stateKey: string]: number[] } = {};
   public alpha: number; // Tasa de aprendizaje
@@ -129,11 +131,9 @@ export class QLearningAgent {
     for (let player = 13; player <= 21; player++) {
       soft[player] = Array(10).fill('H');
     }
-    // Para pares, el agente Q-learning estándar no modela las divisiones directamente
-    // a menos que expandamos el espacio de estados. En su lugar, copiamos los pares por defecto.
-    const defaultPairs = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
-    for (const p of defaultPairs) {
-      pairs[p] = Array(10).fill('H');
+    // Copiar la estrategia de pares estándar ya que el agente no modela splits directamente
+    for (const p of Object.keys(DEFAULT_PAIRS)) {
+      pairs[p] = [...DEFAULT_PAIRS[p]];
     }
 
     // Traducir las mejores acciones de la Q-table a las matrices

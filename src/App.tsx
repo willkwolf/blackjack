@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
-import { Play, BookOpen, BarChart3, Brain } from 'lucide-react';
+import { Play, BarChart3, Brain } from 'lucide-react';
 import { initDatabase } from './db/database.ts';
 import { createDefaultChromosome, Chromosome } from './simulator/core/GeneticEngine.ts';
 import { DEFAULT_RULES, RulesConfig } from './simulator/core/defaultStrategy.ts';
 import Dashboard from './gui/components/Dashboard.tsx';
 import TrainerTable from './gui/components/TrainerTable.tsx';
 import RLVisualizer from './gui/components/RLVisualizer.tsx';
-import ResearchLibrary from './gui/components/ResearchLibrary.tsx';
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'trainer' | 'rl' | 'library'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'trainer' | 'rl'>('dashboard');
   const [db, setDb] = useState<any>(null);
   const [activeStrategy, setActiveStrategy] = useState<Chromosome | null>(null);
+  const [strategySource, setStrategySource] = useState<'goykhman' | 'buramdoyal' | 'taylor' | 'custom'>('taylor');
   const [activeRules] = useState<RulesConfig>(DEFAULT_RULES);
   const [dbLoading, setDbLoading] = useState(true);
 
@@ -104,21 +104,14 @@ function App() {
             className={`casino-btn ${activeTab === 'trainer' ? 'btn-deal' : ''}`}
             style={activeTab !== 'trainer' ? { background: 'rgba(255,255,255,0.05)', color: '#fff' } : {}}
           >
-            <Play size={18} /> mesa 2D
+            <Play size={18} /> Mesa 2D
           </button>
           <button
             onClick={() => setActiveTab('rl')}
             className={`casino-btn ${activeTab === 'rl' ? 'btn-deal' : ''}`}
             style={activeTab !== 'rl' ? { background: 'rgba(255,255,255,0.05)', color: '#fff' } : {}}
           >
-            <Brain size={18} /> Agente RL
-          </button>
-          <button
-            onClick={() => setActiveTab('library')}
-            className={`casino-btn ${activeTab === 'library' ? 'btn-deal' : ''}`}
-            style={activeTab !== 'library' ? { background: 'rgba(255,255,255,0.05)', color: '#fff' } : {}}
-          >
-            <BookOpen size={18} /> Biblioteca
+            <Brain size={18} /> Papers & RL
           </button>
         </nav>
       </header>
@@ -137,17 +130,17 @@ function App() {
             db={db}
             strategy={activeStrategy}
             rules={activeRules}
+            strategySource={strategySource}
           />
         )}
         {activeTab === 'rl' && (
           <RLVisualizer 
             db={db}
             rules={activeRules}
-          />
-        )}
-        {activeTab === 'library' && (
-          <ResearchLibrary 
-            db={db}
+            activeStrategy={activeStrategy}
+            setActiveStrategy={setActiveStrategy}
+            strategySource={strategySource}
+            setStrategySource={setStrategySource}
           />
         )}
       </main>
