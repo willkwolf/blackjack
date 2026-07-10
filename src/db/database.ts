@@ -21,13 +21,34 @@ export async function getSqlEngine() {
     } else {
       // Navegador - carga local con fallback a CDN (redundante y resiliente)
       const baseUrl = import.meta.env.BASE_URL || '/';
+      const localWasmUrl = `${baseUrl}sql-wasm.wasm`;
+      
+      let useLocal = false;
       try {
-        SQL = await initSqlJs({
-          locateFile: (file) => `${baseUrl}${file}`
-        });
-        console.log('✅ SQLite Wasm cargado localmente con éxito.');
-      } catch (err) {
-        console.warn('⚠️ Fallo al cargar SQLite Wasm localmente. Usando fallback de CDN...', err);
+        // Verificar existencia real del archivo local antes de llamar a initSqlJs (evita cuelgues de Emscripten)
+        const response = await fetch(localWasmUrl, { method: 'HEAD' });
+        if (response.ok) {
+          useLocal = true;
+        } else {
+          console.warn(`⚠️ Archivo WASM local retornó código ${response.status}. Usando fallback.`);
+        }
+      } catch (fetchErr) {
+        console.warn('⚠️ Error al verificar archivo WASM local. Intentando fallback a CDN...', fetchErr);
+      }
+
+      if (useLocal) {
+        try {
+          SQL = await initSqlJs({
+            locateFile: (file) => `${baseUrl}${file}`
+          });
+          console.log('✅ SQLite Wasm cargado localmente con éxito.');
+        } catch (err) {
+          console.error('❌ Error al inicializar SQLite Wasm local. Usando fallback de CDN...', err);
+          useLocal = false;
+        }
+      }
+
+      if (!useLocal) {
         SQL = await initSqlJs({
           locateFile: (file) => `https://cdn.jsdelivr.net/npm/sql.js@1.10.2/dist/${file}`
         });
