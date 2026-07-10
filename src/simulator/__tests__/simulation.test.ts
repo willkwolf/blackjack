@@ -45,17 +45,17 @@ describe('Monte Carlo Simulation & Progression Tests', () => {
       // Victoria 1 -> Apuesta 5000 (Paso 2)
       expect(getNextBet(config, 100000, 1, 2500)).toBe(5000);
 
-      // Victoria 2 -> Apuesta 3750 (Paso 3: 1.5u - protege ganancia)
-      expect(getNextBet(config, 100000, 2, 5000)).toBe(3750);
+      // Victoria 2 -> Apuesta 5000 (Paso 3: 1.5u = 3750, redondeado a múltiplo de 2500 es 5000)
+      expect(getNextBet(config, 100000, 2, 5000)).toBe(5000);
 
       // Victoria 3 -> Apuesta 7500 (Paso 4: 3u)
-      expect(getNextBet(config, 100000, 3, 3750)).toBe(7500);
+      expect(getNextBet(config, 100000, 3, 5000)).toBe(7500);
 
       // Victoria 4 -> Resetea a 2500 (Paso 1)
       expect(getNextBet(config, 100000, 4, 7500)).toBe(2500);
 
       // Pérdida -> Resetea a 2500
-      expect(getNextBet(config, 100000, 0, -3750)).toBe(2500);
+      expect(getNextBet(config, 100000, 0, -5000)).toBe(2500);
     });
   });
 
@@ -64,7 +64,8 @@ describe('Monte Carlo Simulation & Progression Tests', () => {
       const rules = { ...DEFAULT_RULES, decks: 6 };
       const progConfig = { type: 'FLAT' as const, baseBet: 2500 };
 
-      const result = runMonteCarlo(500, 100000, rules, mockStrategy, progConfig, {
+      // Usamos un bankroll inicial alto de 10,000,000 COP para evitar bancarrota y asegurar 500 manos
+      const result = runMonteCarlo(500, 10000000, rules, mockStrategy, progConfig, {
         saveHandHistoryLimit: 50
       });
 

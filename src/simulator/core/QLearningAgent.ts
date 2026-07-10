@@ -57,8 +57,22 @@ export class QLearningAgent {
 
     // Lista de índices de acciones válidas en este momento
     const validActionIndices = [0, 1]; // Hit y Stand siempre son válidas
-    if (canDouble) validActionIndices.push(2);
-    if (canSurrender) validActionIndices.push(3);
+    
+    // Solo permitir doblar si la mano dura es < 12, o suave es <= 19
+    let isReasonableDouble = canDouble;
+    if (canDouble) {
+      if (!isSoft && playerValue >= 12) isReasonableDouble = false;
+      if (isSoft && playerValue >= 20) isReasonableDouble = false;
+    }
+    if (isReasonableDouble) validActionIndices.push(2);
+
+    // Solo permitir rendición si es mano dura 15, 16 o 17
+    let isReasonableSurrender = canSurrender;
+    if (canSurrender) {
+      if (isSoft) isReasonableSurrender = false;
+      else if (playerValue !== 15 && playerValue !== 16 && playerValue !== 17) isReasonableSurrender = false;
+    }
+    if (isReasonableSurrender) validActionIndices.push(3);
 
     // Epsilon-Greedy: Exploración aleatoria
     if (Math.random() < this.epsilon) {

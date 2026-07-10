@@ -115,5 +115,39 @@ describe('AI Modules Tests (RL & GA)', () => {
       // El mejor individuo debe tener su fitness evaluada
       expect(population[0].fitness).not.toBe(-Infinity);
     });
+
+    it('should not mutate hard 19 or soft 20 to Double or Surrender', () => {
+      const chrom = createDefaultChromosome();
+      // Mutar repetidamente con tasa 1.0 para verificar que nunca selecciona Doble o Rendirse en manos altas
+      for (let i = 0; i < 50; i++) {
+        mutateChromosome(chrom, 1.0);
+        // En mano dura 19, solo se permite H o S (no D, no SU)
+        expect(['H', 'S']).toContain(chrom.hard['19'][0]);
+        // En mano dura 15, se permite H, S, SU (no D)
+        expect(['H', 'S', 'SU']).toContain(chrom.hard['15'][0]);
+        // En mano suave 20, solo se permite H o S (no D)
+        expect(['H', 'S']).toContain(chrom.soft['20'][0]);
+      }
+    });
+  });
+
+  describe('QLearningAgent action restrictions', () => {
+    it('should not allow Double or Surrender on hard 19 vs dealer 9', () => {
+      const agent = new QLearningAgent({ epsilon: 1.0 }); // Permitir exploración total
+      
+      // Intentar seleccionar acción 100 veces y verificar que nunca devuelve 'D' (Double) ni 'SU' (Surrender)
+      for (let i = 0; i < 100; i++) {
+        const action = agent.selectAction(19, 9, false, true, true);
+        expect(['H', 'S']).toContain(action);
+      }
+    });
+
+    it('should not allow Double on soft 20 vs dealer 9', () => {
+      const agent = new QLearningAgent({ epsilon: 1.0 });
+      for (let i = 0; i < 100; i++) {
+        const action = agent.selectAction(20, 9, true, true, true);
+        expect(action).not.toBe('D');
+      }
+    });
   });
 });

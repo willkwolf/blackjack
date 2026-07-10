@@ -30,9 +30,9 @@ export function cloneChromosome(chrom: Chromosome): Chromosome {
 // Crea un cromosoma por defecto
 export function createDefaultChromosome(baseBet: number = 2500): Chromosome {
   return {
-    hard: DEFAULT_HARD_HANDS,
-    soft: DEFAULT_SOFT_HANDS,
-    pairs: DEFAULT_PAIRS,
+    hard: JSON.parse(JSON.stringify(DEFAULT_HARD_HANDS)),
+    soft: JSON.parse(JSON.stringify(DEFAULT_SOFT_HANDS)),
+    pairs: JSON.parse(JSON.stringify(DEFAULT_PAIRS)),
     betting: {
       type: 'DSP', // DSP por defecto por ser robusta
       baseBet,
@@ -106,14 +106,19 @@ export function initializePopulation(
 
 // Mutación de un cromosoma respetando las reglas de Blackjack
 export function mutateChromosome(chrom: Chromosome, mutationRate: number) {
-  const actionsList = ['H', 'S', 'D', 'SU'];
-  const pairActionsList = ['SP', 'H', 'S', 'D', 'SU'];
-
   // Mutar manos duras
   for (const val of Object.keys(chrom.hard)) {
+    const valNum = parseInt(val, 10);
+    let allowedActions = ['H', 'S', 'D', 'SU'];
+    if (valNum >= 12 && valNum < 17) {
+      allowedActions = ['H', 'S', 'SU'];
+    } else if (valNum >= 17) {
+      allowedActions = ['H', 'S'];
+    }
+
     chrom.hard[val] = chrom.hard[val].map(action => {
       if (Math.random() < mutationRate) {
-        return actionsList[Math.floor(Math.random() * actionsList.length)];
+        return allowedActions[Math.floor(Math.random() * allowedActions.length)];
       }
       return action;
     });
@@ -121,15 +126,22 @@ export function mutateChromosome(chrom: Chromosome, mutationRate: number) {
 
   // Mutar manos suaves
   for (const val of Object.keys(chrom.soft)) {
+    const valNum = parseInt(val, 10);
+    let allowedActions = ['H', 'S', 'D'];
+    if (valNum >= 20) {
+      allowedActions = ['H', 'S'];
+    }
+
     chrom.soft[val] = chrom.soft[val].map(action => {
       if (Math.random() < mutationRate) {
-        return actionsList[Math.floor(Math.random() * actionsList.length)];
+        return allowedActions[Math.floor(Math.random() * allowedActions.length)];
       }
       return action;
     });
   }
 
   // Mutar pares
+  const pairActionsList = ['SP', 'H', 'S', 'D', 'SU'];
   for (const rank of Object.keys(chrom.pairs)) {
     chrom.pairs[rank] = chrom.pairs[rank].map(action => {
       if (Math.random() < mutationRate) {

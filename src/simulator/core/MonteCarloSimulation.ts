@@ -40,58 +40,52 @@ export function getNextBet(
   lastResult: number // >0 ganancia, <0 pérdida, 0 push
 ): number {
   const baseBet = progConfig.baseBet;
+  let bet = baseBet;
 
   if (progConfig.type === 'FLAT') {
-    return baseBet;
-  }
-
-  if (progConfig.type === 'PAROLI') {
+    bet = baseBet;
+  } else if (progConfig.type === 'PAROLI') {
     const maxSteps = progConfig.maxProgressions || 2;
-    // Si perdimos o empatamos, o si ya alcanzamos el límite de la progresión y ganamos (reseteamos para asegurar ganancia)
     if (lastResult < 0) {
-      return baseBet;
+      bet = baseBet;
     } else if (lastResult > 0) {
       if (consecutiveWins <= maxSteps) {
-        // Multiplica por 2 en cada paso: 1u -> 2u -> 4u
-        return baseBet * Math.pow(2, consecutiveWins);
+        bet = baseBet * Math.pow(2, consecutiveWins);
       } else {
-        // Ponytail: Reseteo automático tras completar la racha para evitar que una pérdida limpie todo el profit.
-        // Esto corrige el bug de la estrategia Paroli clásica que el usuario reportó.
-        return baseBet;
+        bet = baseBet;
       }
+    } else {
+      bet = baseBet;
     }
-    // Si fue push, mantenemos la última apuesta
-    return baseBet; // Valor por defecto
-  }
-
-  if (progConfig.type === 'DSP') {
-    // Progresión Protegida Dinámica (Dynamic Shielded Progression)
-    // Pasos de apuesta: 1u -> 2u -> 1.5u -> 3u -> Reset
-    // Bloquea ganancia en el paso 3 para asegurar retorno neto incluso si se pierde.
+  } else if (progConfig.type === 'DSP') {
     if (lastResult < 0) {
-      return baseBet;
+      bet = baseBet;
     } else if (lastResult > 0) {
       if (consecutiveWins === 1) {
-        return baseBet * 2; // Paso 2: arriesga ganancia
+        bet = baseBet * 2;
       } else if (consecutiveWins === 2) {
-        return baseBet * 1.5; // Paso 3: Protege la mitad de la ganancia (+1u libre de riesgo)
+        bet = baseBet * 1.5;
       } else if (consecutiveWins === 3) {
-        return baseBet * 3; // Paso 4: Arriesga parte del acumulado
+        bet = baseBet * 3;
       } else {
-        return baseBet; // Reset tras completar el ciclo de 4 victorias
+        bet = baseBet;
       }
+    } else {
+      bet = baseBet;
     }
-    return baseBet;
+  } else {
+    // Kelly fraccional para sizing dinámico basado en ventaja teórica
+    // Supone ventaja del jugador de 1% (u optimizada por GA)
+    // Bet = Bankroll * Advantage * KellyFraction
+    const estimatedAdvantage = 0.01; // 1%
+    const fraction = progConfig.kellyFraction || 0.5; // Half-Kelly por defecto
+    const kellyBet = currentBankroll * estimatedAdvantage * fraction;
+    bet = Math.max(baseBet, kellyBet);
   }
 
-  // Kelly fraccional para sizing dinámico basado en ventaja teórica
-  // Supone ventaja del jugador de 1% (u optimizada por GA)
-  // Bet = Bankroll * Advantage * KellyFraction
-  const estimatedAdvantage = 0.01; // 1%
-  const fraction = progConfig.kellyFraction || 0.5; // Half-Kelly por defecto
-  const kellyBet = currentBankroll * estimatedAdvantage * fraction;
-  // Limitar al mínimo de la mesa (baseBet) y redondear
-  return Math.max(baseBet, Math.round(kellyBet / 500) * 500);
+  // Asegurar que la apuesta sea un múltiplo entero de la apuesta base (unidad mínima)
+  const multiplier = Math.round(bet / baseBet);
+  return Math.max(1, multiplier) * baseBet;
 }
 
 // Ejecuta la simulación Monte Carlo

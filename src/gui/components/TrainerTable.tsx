@@ -627,7 +627,7 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
         {/* Croupier (Dealer) Area */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginTop: '20px' }}>
           <p style={{ color: 'var(--gold)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-            Dealer {dealerHand && `(${dealerHand.getValue()})`}
+            Dealer {dealerHand && `(${gameState === 'playing' ? dealerHand.cards[0].value : dealerHand.getValue()})`}
           </p>
           <div style={{ display: 'flex', gap: '10px' }}>
             {dealerHand?.cards.map((card, idx) => {

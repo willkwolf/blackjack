@@ -327,7 +327,7 @@ export default function Dashboard({
                   </tr>
                 </thead>
                 <tbody>
-                  {[16, 15, 14, 13, 12, 11, 10, 9, 8].map((val) => (
+                  {[20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8].map((val) => (
                     <tr key={val}>
                       <td><strong>{val}</strong></td>
                       {activeStrategy.hard[val].map((act, idx) => (
@@ -358,7 +358,7 @@ export default function Dashboard({
                     </tr>
                   </thead>
                   <tbody>
-                    {[18, 17, 16, 15, 14, 13].map((val) => (
+                    {[20, 19, 18, 17, 16, 15, 14, 13].map((val) => (
                       <tr key={val}>
                         <td><strong>A,{val - 11}</strong></td>
                         {activeStrategy.soft[val].map((act, idx) => (

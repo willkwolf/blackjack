@@ -183,4 +183,28 @@ describe('Blackjack Engine Tests', () => {
       expect(result.totalReward).toBe(7500);
     });
   });
+
+  describe('Robustness and Edge Cases (Hand 19 vs Dealer 9)', () => {
+    it('should recommend STAND for player hard 19 vs dealer 9', () => {
+      const hand = new Hand(2500);
+      hand.addCard(new Card('10', '♠'));
+      hand.addCard(new Card('9', '♦'));
+      expect(hand.getValue()).toBe(19);
+      expect(hand.isSoft()).toBe(false);
+
+      const action = getActionFromStrategy(hand, new Card('9', '♥'), mockStrategy, DEFAULT_RULES);
+      expect(action).toBe('S'); // Stand, never Double
+    });
+
+    it('should recommend STAND for player soft 19 (A,8) vs dealer 9', () => {
+      const hand = new Hand(2500);
+      hand.addCard(new Card('A', '♠'));
+      hand.addCard(new Card('8', '♦'));
+      expect(hand.getValue()).toBe(19);
+      expect(hand.isSoft()).toBe(true);
+
+      const action = getActionFromStrategy(hand, new Card('9', '♥'), mockStrategy, DEFAULT_RULES);
+      expect(action).toBe('S'); // Stand, never Double
+    });
+  });
 });
