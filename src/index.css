@@ -296,3 +296,185 @@ h1, h2, h3, h4 {
   transform: none;
   box-shadow: none;
 }
+
+/* Efectos visuales de gestos en la mesa */
+.felt-tap-ripple {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(212, 175, 55, 0.45);
+  box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+  transform: translate(-50%, -50%) scale(0);
+  animation: ripple-effect 0.5s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+  pointer-events: none;
+  z-index: 99;
+}
+
+@keyframes ripple-effect {
+  0% {
+    transform: translate(-50%, -50%) scale(0.1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.5);
+    opacity: 0;
+  }
+}
+
+.gesture-progress-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(3, 10, 6, 0.75);
+  backdrop-filter: blur(2px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  z-index: 100;
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  gap: 10px;
+  animation: fade-in-fast 0.2s ease-out;
+}
+
+@keyframes fade-in-fast {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.progress-ring-circle {
+  transition: stroke-dashoffset 0.1s linear;
+  transform: rotate(-90deg);
+  transform-origin: 50% 50%;
+}
+
+.swipe-track-visual {
+  width: 100%;
+  height: 36px;
+  background: rgba(255, 23, 68, 0.05);
+  border: 1px dashed rgba(255, 23, 68, 0.3);
+  border-radius: 18px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--red-neon);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.3s ease;
+  user-select: none;
+  margin-top: 10px;
+}
+
+.swipe-track-active {
+  background: rgba(255, 23, 68, 0.15);
+  border-color: var(--red-neon);
+  box-shadow: 0 0 10px rgba(255, 23, 68, 0.3);
+}
+
+.swipe-handle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--red-neon);
+  position: absolute;
+  left: 5px;
+  box-shadow: 0 0 8px var(--red-neon), inset 0 0 4px rgba(255,255,255,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: bold;
+  cursor: grab;
+  transition: left 0.1s ease-out;
+}
+
+.swipe-handle:active {
+  cursor: grabbing;
+}
+
+/* Panel de Leyenda Colapsable de Gestos */
+.gesture-legend-panel {
+  background: rgba(5, 20, 12, 0.95);
+  border: 1px solid var(--gold-glow);
+  border-radius: 12px;
+  padding: 16px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.gesture-legend-header {
+  color: var(--gold);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.9rem;
+  font-weight: bold;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.15);
+  padding-bottom: 6px;
+}
+
+.gesture-legend-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: slide-down 0.25s ease-out;
+}
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.gesture-legend-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  transition: background 0.2s ease;
+}
+
+.gesture-legend-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.gesture-icon-badge {
+  background: rgba(212, 175, 55, 0.08);
+  border: 1px solid var(--gold);
+  color: var(--gold);
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  min-width: 85px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.gesture-desc {
+  text-align: right;
+  font-weight: 500;
+  color: #fff;
+}
+

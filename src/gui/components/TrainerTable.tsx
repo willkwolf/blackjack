@@ -104,6 +104,105 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
   });
   const [log, setLog] = useState<string[]>([]);
 
+  // Estados para Gestos Táctiles/Mouse de Casino Real
+  const [isLegendOpen, setIsLegendOpen] = useState(true);
+  const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
+  const [holdProgress, setHoldProgress] = useState(0); // 0 a 100
+  const [holdInterval, setHoldInterval] = useState<any>(null);
+  
+  const [swipeStart, setSwipeStart] = useState(0);
+  const [swipeX, setSwipeX] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+
+  // Limpieza del intervalo de hold al desmontar
+  useEffect(() => {
+    return () => {
+      if (holdInterval) clearInterval(holdInterval);
+    };
+  }, [holdInterval]);
+
+  // Doble click en el tapete para Pedir (Hit)
+  const handleTableDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (gameState !== 'playing') return;
+    if (insuranceOffered) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    const newRipple = { id: Date.now(), x, y };
+    setRipples(prev => [...prev, newRipple]);
+
+    setTimeout(() => {
+      setRipples(prev => prev.filter(r => r.id !== newRipple.id));
+    }, 500);
+
+    handlePlayerAction('H');
+  };
+
+  // Click sostenido arriba de las cartas para Plantarse (Stand)
+  const handleHoldStart = () => {
+    if (gameState !== 'playing') return;
+    if (insuranceOffered) return;
+
+    if (holdInterval) clearInterval(holdInterval);
+
+    let progress = 0;
+    setHoldProgress(0);
+
+    const interval = setInterval(() => {
+      progress += 8;
+      if (progress >= 100) {
+        clearInterval(interval);
+        setHoldInterval(null);
+        setHoldProgress(0);
+        handlePlayerAction('S');
+      } else {
+        setHoldProgress(progress);
+      }
+    }, 50);
+
+    setHoldInterval(interval);
+  };
+
+  const handleHoldEnd = () => {
+    if (holdInterval) {
+      clearInterval(holdInterval);
+      setHoldInterval(null);
+    }
+    setHoldProgress(0);
+  };
+
+  // Arrastre abajo de las cartas para Rendición (Surrender)
+  const handleSwipeStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (gameState !== 'playing') return;
+    if (insuranceOffered) return;
+    setIsSwiping(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    setSwipeStart(clientX);
+  };
+
+  const handleSwipeMove = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!isSwiping) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const diffX = clientX - swipeStart;
+    
+    // Solo permitir deslizar hacia la derecha (valores positivos) hasta 90px
+    const newX = Math.max(0, Math.min(90, diffX));
+    setSwipeX(newX);
+
+    if (newX >= 80) {
+      setIsSwiping(false);
+      setSwipeX(0);
+      handlePlayerAction('SU');
+    }
+  };
+
+  const handleSwipeEnd = () => {
+    setIsSwiping(false);
+    setSwipeX(0);
+  };
+
   // Inicializar baraja
   useEffect(() => {
     const d = new Deck(rules.decks);
@@ -730,20 +829,94 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
             ) : (
               playerHands.map((hand, idx) => {
                 const isActive = idx === activeHandIdx && gameState === 'playing';
+                const canSurrender = rules.surrenderAllowed && !hand.isSplitHand && hand.cards.length === 2 && isActive;
                 return (
                   <div 
                     key={idx} 
+                    onDoubleClick={isActive && !insuranceOffered ? handleTableDoubleClick : undefined}
                     style={{
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'center',
                       gap: '10px',
-                      padding: '10px',
+                      padding: isActive ? '15px 25px' : '10px 15px',
                       borderRadius: '12px',
                       border: isActive ? '2px dashed var(--gold)' : '2px solid transparent',
-                      background: isActive ? 'rgba(212,175,55,0.04)' : 'none'
+                      background: isActive ? 'rgba(212,175,55,0.05)' : 'none',
+                      position: 'relative',
+                      minWidth: '180px',
+                      cursor: isActive ? 'pointer' : 'default',
+                      userSelect: 'none',
+                      transition: 'all 0.3s ease'
                     }}
                   >
+                    {/* Ripples de doble click */}
+                    {isActive && ripples.map(ripple => (
+                      <div
+                        key={ripple.id}
+                        className="felt-tap-ripple"
+                        style={{ left: ripple.x, top: ripple.y }}
+                      />
+                    ))}
+
+                    {/* Overlay de progreso circular al mantener click */}
+                    {isActive && holdProgress > 0 && (
+                      <div className="gesture-progress-overlay">
+                        <svg width="60" height="60">
+                          <circle
+                            cx="30"
+                            cy="30"
+                            r="22"
+                            stroke="rgba(255,255,255,0.15)"
+                            strokeWidth="4"
+                            fill="transparent"
+                          />
+                          <circle
+                            cx="30"
+                            cy="30"
+                            r="22"
+                            stroke="var(--gold)"
+                            strokeWidth="4"
+                            fill="transparent"
+                            strokeDasharray={2 * Math.PI * 22}
+                            strokeDashoffset={2 * Math.PI * 22 * (1 - holdProgress / 100)}
+                            className="progress-ring-circle"
+                          />
+                        </svg>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--gold)' }}>
+                          Plantándose
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Botón de Click Sostenido (Stand) arriba de las cartas */}
+                    {isActive && (
+                      <div 
+                        onMouseDown={handleHoldStart}
+                        onMouseUp={handleHoldEnd}
+                        onMouseLeave={handleHoldEnd}
+                        onTouchStart={handleHoldStart}
+                        onTouchEnd={handleHoldEnd}
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px',
+                          background: 'rgba(41, 121, 255, 0.12)',
+                          border: '1px solid rgba(41, 121, 255, 0.35)',
+                          borderRadius: '8px',
+                          fontSize: '0.72rem',
+                          color: '#fff',
+                          textAlign: 'center',
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          marginBottom: '4px',
+                          transition: 'all 0.2s ease',
+                          userSelect: 'none'
+                        }}
+                      >
+                        🛑 Mantener para Plantar
+                      </div>
+                    )}
+
                     <div style={{ display: 'flex', gap: '10px' }}>
                       {hand.cards.map((card, cidx) => {
                         const isRed = ['♥', '♦'].includes(card.suit);
@@ -763,6 +936,30 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
                     <p style={{ color: 'var(--gold)', fontSize: '0.8rem' }}>
                       Apuesta: ${hand.bet.toLocaleString()} COP
                     </p>
+
+                    {/* Canal deslizante (Surrender) abajo de las cartas */}
+                    {canSurrender && (
+                      <div 
+                        className={`swipe-track-visual ${isSwiping ? 'swipe-track-active' : ''}`}
+                        onMouseMove={handleSwipeMove}
+                        onMouseUp={handleSwipeEnd}
+                        onMouseLeave={handleSwipeEnd}
+                        onTouchMove={handleSwipeMove}
+                        onTouchEnd={handleSwipeEnd}
+                      >
+                        <div 
+                          className="swipe-handle"
+                          onMouseDown={handleSwipeStart}
+                          onTouchStart={handleSwipeStart}
+                          style={{ left: `${5 + swipeX}px` }}
+                        >
+                          →
+                        </div>
+                        <span style={{ fontSize: '0.65rem', pointerEvents: 'none' }}>
+                          {isSwiping ? 'Suelte al final...' : 'Deslizar para Rendición'}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })
@@ -813,29 +1010,20 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
           )}
 
           {gameState === 'playing' && activeHand && !insuranceOffered && (
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button onClick={() => handlePlayerAction('H')} className="casino-btn btn-hit">Hit (Pedir)</button>
-              <button onClick={() => handlePlayerAction('S')} className="casino-btn btn-stand">Stand (Plantar)</button>
+            <div style={{ display: 'flex', gap: '15px', justifyContent: 'center' }}>
               <button 
                 onClick={() => handlePlayerAction('D')} 
                 disabled={!activeHand.canDouble() || (activeHand.isSplitHand && !rules.dasAllowed)} 
                 className="casino-btn btn-double"
               >
-                Double (Doblar)
+                Doblar (Double)
               </button>
               <button 
                 onClick={() => handlePlayerAction('SP')} 
                 disabled={!activeHand.isPair() || playerHands.length > rules.maxSplits}
                 className="casino-btn btn-split"
               >
-                Split (Dividir)
-              </button>
-              <button 
-                onClick={() => handlePlayerAction('SU')} 
-                disabled={!rules.surrenderAllowed || !activeHand.canDouble() || activeHand.isSplitHand} 
-                className="casino-btn btn-surrender"
-              >
-                Surrender
+                Dividir (Split)
               </button>
             </div>
           )}
@@ -884,6 +1072,30 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
       {/* Panel de Estadísticas, Modos e Información Científica */}
       <aside style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         
+        {/* Leyenda de Gestos de Casino */}
+        <div className="gesture-legend-panel">
+          <div className="gesture-legend-header" onClick={() => setIsLegendOpen(!isLegendOpen)}>
+            <span>❓ Guía de Gestos de Casino</span>
+            <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>{isLegendOpen ? '▲ Contraer' : '▼ Expandir'}</span>
+          </div>
+          {isLegendOpen && (
+            <div className="gesture-legend-items">
+              <div className="gesture-legend-item">
+                <span className="gesture-icon-badge">Doble Click</span>
+                <span className="gesture-desc">Pedir (Hit) en tapete</span>
+              </div>
+              <div className="gesture-legend-item">
+                <span className="gesture-icon-badge">Mantener Presionado</span>
+                <span className="gesture-desc">Plantarse (Stand)</span>
+              </div>
+              <div className="gesture-legend-item">
+                <span className="gesture-icon-badge">Deslizar Barra</span>
+                <span className="gesture-desc">Rendirse (Surrender)</span>
+              </div>
+            </div>
+          )}
+        </div>
+
         {/* Selector de Modo de Práctica */}
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <h3 style={{ color: 'var(--gold)', fontSize: '1.1rem' }}>🎮 Modo de Práctica</h3>
