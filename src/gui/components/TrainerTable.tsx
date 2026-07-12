@@ -21,6 +21,49 @@ interface PlayError {
   timestamp: string;
 }
 
+// Desglose de apuesta en fichas reales de casino
+const getChipsForBet = (bet: number): number[] => {
+  const denominations = [50000, 25000, 10000, 5000, 2500];
+  const chips: number[] = [];
+  let remaining = bet;
+  for (const denom of denominations) {
+    while (remaining >= denom) {
+      chips.push(denom);
+      remaining -= denom;
+    }
+  }
+  return chips;
+};
+
+// Componente visual para la pila de fichas apiladas
+const ChipStack = ({ bet }: { bet: number }) => {
+  const chips = getChipsForBet(bet);
+  if (chips.length === 0) return null;
+
+  // Altura dinámica según la cantidad de fichas apiladas
+  const stackHeight = 42 + (chips.length - 1) * 6;
+
+  return (
+    <div className="table-chip-container" style={{ height: `${stackHeight}px`, width: '100%' }}>
+      {chips.map((val, idx) => {
+        const displayVal = val >= 1000 ? `${val / 1000}k` : `${val}`;
+        return (
+          <div
+            key={idx}
+            className={`table-chip chip-${val}`}
+            style={{
+              bottom: `${idx * 6}px`,
+              zIndex: idx + 1,
+            }}
+          >
+            {displayVal}
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 export default function TrainerTable({ strategy, rules, strategySource }: TrainerTableProps) {
   // Configuración del Capital y Apuesta
   const [bankroll, setBankroll] = useState(1000000); // 1,000,000 COP por defecto (bankroll ideal)
@@ -487,8 +530,14 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
   };
 
   const moveToNextHand = (hands: Hand[]) => {
-    if (activeHandIdx + 1 < hands.length) {
-      setActiveHandIdx(prev => prev + 1);
+    let nextIdx = activeHandIdx + 1;
+    // Buscar la siguiente mano que no esté plantada, pasada o rendida
+    while (nextIdx < hands.length && (hands[nextIdx].isStood || hands[nextIdx].isBusted() || hands[nextIdx].isSurrendered)) {
+      nextIdx++;
+    }
+
+    if (nextIdx < hands.length) {
+      setActiveHandIdx(nextIdx);
     } else {
       setGameState('dealer_turn');
       setTimeout(() => {
@@ -628,7 +677,7 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
         {/* Croupier (Dealer) Area */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginTop: '20px' }}>
           <p style={{ color: 'var(--gold)', fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-            Dealer {dealerHand && `(${gameState === 'playing' ? dealerHand.cards[0].value : dealerHand.getValue()})`}
+            Dealer
           </p>
           <div style={{ display: 'flex', gap: '10px' }}>
             {dealerHand?.cards.map((card, idx) => {
@@ -655,43 +704,69 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
         {/* Zona de Juego Principal (Cartas Jugador) */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
           <div style={{ display: 'flex', gap: '50px', justifyContent: 'center' }}>
-            {playerHands.map((hand, idx) => {
-              const isActive = idx === activeHandIdx && gameState === 'playing';
-              return (
-                <div 
-                  key={idx} 
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: '10px',
-                    padding: '10px',
-                    borderRadius: '12px',
-                    border: isActive ? '2px dashed var(--gold)' : '2px solid transparent',
-                    background: isActive ? 'rgba(212,175,55,0.04)' : 'none'
-                  }}
-                >
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    {hand.cards.map((card, cidx) => {
-                      const isRed = ['♥', '♦'].includes(card.suit);
-                      return (
-                        <div key={cidx} className={`playing-card ${isRed ? 'red-suit' : ''}`}>
-                          <div>{card.rank}</div>
-                          <div className="card-suit-center">{card.suit}</div>
-                          <div style={{ transform: 'rotate(180deg)', textAlign: 'right' }}>{card.rank}</div>
-                        </div>
-                      );
-                    })}
+            {gameState === 'betting' ? (
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '20px 40px',
+                borderRadius: '16px',
+                border: '2px dashed var(--gold)',
+                background: 'rgba(212, 175, 55, 0.05)',
+                boxShadow: 'inset 0 0 20px rgba(0,0,0,0.6)',
+                minWidth: '140px',
+                minHeight: '140px',
+                transition: 'all 0.3s ease'
+              }}>
+                <ChipStack bet={betSize} />
+                <span style={{ color: 'var(--gold)', fontSize: '0.85rem', fontWeight: 'bold', marginTop: '10px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  Apuesta
+                </span>
+                <span style={{ color: '#fff', fontSize: '0.8rem', opacity: 0.8, marginTop: '2px' }}>
+                  ${betSize.toLocaleString()} COP
+                </span>
+              </div>
+            ) : (
+              playerHands.map((hand, idx) => {
+                const isActive = idx === activeHandIdx && gameState === 'playing';
+                return (
+                  <div 
+                    key={idx} 
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '10px',
+                      borderRadius: '12px',
+                      border: isActive ? '2px dashed var(--gold)' : '2px solid transparent',
+                      background: isActive ? 'rgba(212,175,55,0.04)' : 'none'
+                    }}
+                  >
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      {hand.cards.map((card, cidx) => {
+                        const isRed = ['♥', '♦'].includes(card.suit);
+                        return (
+                          <div key={cidx} className={`playing-card ${isRed ? 'red-suit' : ''}`}>
+                            <div>{card.rank}</div>
+                            <div className="card-suit-center">{card.suit}</div>
+                            <div style={{ transform: 'rotate(180deg)', textAlign: 'right' }}>{card.rank}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 'bold' }}>
+                      Mano {idx + 1}
+                    </p>
+                    <ChipStack bet={hand.bet} />
+                    <p style={{ color: 'var(--gold)', fontSize: '0.8rem' }}>
+                      Apuesta: ${hand.bet.toLocaleString()} COP
+                    </p>
                   </div>
-                  <p style={{ color: '#fff', fontSize: '0.85rem', fontWeight: 'bold' }}>
-                    Mano {idx + 1} {hand.getValue() > 0 && `(${hand.getValue()})`}
-                  </p>
-                  <p style={{ color: 'var(--gold)', fontSize: '0.8rem' }}>
-                    Apuesta: ${hand.bet.toLocaleString()} COP
-                  </p>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 

@@ -134,9 +134,72 @@ h1, h2, h3, h4 {
 
 .chip-500 { background: #d32f2f; color: white; }
 .chip-2500 { background: #1976d2; color: white; }
+.chip-5000 { background: #d32f2f; color: white; }
 .chip-10000 { background: #388e3c; color: white; }
+.chip-25000 { background: #212121; color: #d4af37; border-color: #d4af37 !important; }
 .chip-50000 { background: #7b1fa2; color: white; }
 .chip-100000 { background: #f57c00; color: white; }
+
+/* Fichas de casino en la mesa (apiladas) */
+.table-chip-container {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 15px auto;
+  transition: all 0.3s ease;
+}
+
+.table-chip {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.7rem;
+  font-family: 'Outfit', sans-serif;
+  user-select: none;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4), inset 0 0 5px rgba(0, 0, 0, 0.3);
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.table-chip.chip-2500 {
+  background: radial-gradient(circle, #2196f3 60%, #0d47a1 100%);
+  border: 3px dashed rgba(255, 255, 255, 0.8);
+  color: #ffffff;
+}
+.table-chip.chip-5000 {
+  background: radial-gradient(circle, #f44336 60%, #b71c1c 100%);
+  border: 3px dashed rgba(255, 255, 255, 0.8);
+  color: #ffffff;
+}
+.table-chip.chip-10000 {
+  background: radial-gradient(circle, #4caf50 60%, #1b5e20 100%);
+  border: 3px dashed rgba(255, 255, 255, 0.8);
+  color: #ffffff;
+}
+.table-chip.chip-25000 {
+  background: radial-gradient(circle, #303030 60%, #121212 100%);
+  border: 3px dashed #d4af37;
+  color: #d4af37;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.5), 0 0 4px rgba(212, 175, 55, 0.3), inset 0 0 5px rgba(0,0,0,0.5);
+}
+.table-chip.chip-50000 {
+  background: radial-gradient(circle, #9c27b0 60%, #4a148c 100%);
+  border: 3px dashed rgba(255, 255, 255, 0.8);
+  color: #ffffff;
+}
+.table-chip.chip-100000 {
+  background: radial-gradient(circle, #ff9800 60%, #e65100 100%);
+  border: 3px dashed rgba(255, 255, 255, 0.8);
+  color: #ffffff;
+}
+
 
 /* Cartas de Juego */
 .playing-card {
