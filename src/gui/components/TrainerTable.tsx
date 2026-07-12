@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, RotateCcw, Plus, Minus, FileText } from 'lucide-react';
 import { Hand, Deck, getActionFromStrategy } from '../../simulator/core/BlackjackEngine.ts';
 import { Chromosome } from '../../simulator/core/GeneticEngine.ts';
@@ -107,19 +107,13 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
   // Estados para Gestos Táctiles/Mouse de Casino Real
   const [isLegendOpen, setIsLegendOpen] = useState(true);
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
-  const [holdProgress, setHoldProgress] = useState(0); // 0 a 100
-  const holdIntervalRef = useRef<any>(null);
+  const [standSwipeStart, setStandSwipeStart] = useState(0);
+  const [standSwipeX, setStandSwipeX] = useState(0);
+  const [isStandSwiping, setIsStandSwiping] = useState(false);
   
   const [swipeStart, setSwipeStart] = useState(0);
   const [swipeX, setSwipeX] = useState(0);
   const [isSwiping, setIsSwiping] = useState(false);
-
-  // Limpieza del intervalo de hold al desmontar
-  useEffect(() => {
-    return () => {
-      if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
-    };
-  }, []);
 
   // Doble clic en el tapete para Pedir (Hit)
   const handleTableDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -140,38 +134,33 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
     handlePlayerAction('H');
   };
 
-  // Click sostenido arriba de las cartas para Plantarse (Stand)
-  const handleHoldStart = (e: React.MouseEvent | React.TouchEvent) => {
+  // Deslizador de Stand (Plantarse) en la parte de arriba
+  const handleStandSwipeStart = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (gameState !== 'playing') return;
     if (insuranceOffered) return;
-    e.preventDefault(); // Previene selección de texto/arrastre por defecto del navegador en escritorios
-
-    if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
-
-    let progress = 0;
-    setHoldProgress(0);
-
-    holdIntervalRef.current = setInterval(() => {
-      progress += 8;
-      if (progress >= 100) {
-        if (holdIntervalRef.current) {
-          clearInterval(holdIntervalRef.current);
-          holdIntervalRef.current = null;
-        }
-        setHoldProgress(0);
-        handlePlayerAction('S');
-      } else {
-        setHoldProgress(progress);
-      }
-    }, 50);
+    setIsStandSwiping(true);
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    setStandSwipeStart(clientX);
   };
 
-  const handleHoldEnd = () => {
-    if (holdIntervalRef.current) {
-      clearInterval(holdIntervalRef.current);
-      holdIntervalRef.current = null;
+  const handleStandSwipeMove = (e: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (!isStandSwiping) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const diffX = clientX - standSwipeStart;
+
+    const newX = Math.max(0, Math.min(90, diffX));
+    setStandSwipeX(newX);
+
+    if (newX >= 80) {
+      setIsStandSwiping(false);
+      setStandSwipeX(0);
+      handlePlayerAction('S');
     }
-    setHoldProgress(0);
+  };
+
+  const handleStandSwipeEnd = () => {
+    setIsStandSwiping(false);
+    setStandSwipeX(0);
   };
 
   // Arrastre abajo de las cartas para Rendición (Surrender)
@@ -860,61 +849,28 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
                       />
                     ))}
 
-                    {/* Overlay de progreso circular al mantener click */}
-                    {isActive && holdProgress > 0 && (
-                      <div className="gesture-progress-overlay">
-                        <svg width="60" height="60">
-                          <circle
-                            cx="30"
-                            cy="30"
-                            r="22"
-                            stroke="rgba(255,255,255,0.15)"
-                            strokeWidth="4"
-                            fill="transparent"
-                          />
-                          <circle
-                            cx="30"
-                            cy="30"
-                            r="22"
-                            stroke="var(--gold)"
-                            strokeWidth="4"
-                            fill="transparent"
-                            strokeDasharray={2 * Math.PI * 22}
-                            strokeDashoffset={2 * Math.PI * 22 * (1 - holdProgress / 100)}
-                            className="progress-ring-circle"
-                          />
-                        </svg>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--gold)' }}>
-                          Plantándose
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Botón de Click Sostenido (Stand) arriba de las cartas */}
+                    {/* Deslizador de Stand (Plantarse) arriba de las cartas */}
                     {isActive && (
                       <div 
-                        onMouseDown={handleHoldStart}
-                        onMouseUp={handleHoldEnd}
-                        onMouseLeave={handleHoldEnd}
-                        onTouchStart={handleHoldStart}
-                        onTouchEnd={handleHoldEnd}
-                        style={{
-                          width: '100%',
-                          padding: '6px 8px',
-                          background: 'rgba(41, 121, 255, 0.12)',
-                          border: '1px solid rgba(41, 121, 255, 0.35)',
-                          borderRadius: '8px',
-                          fontSize: '0.72rem',
-                          color: '#fff',
-                          textAlign: 'center',
-                          fontWeight: 'bold',
-                          cursor: 'pointer',
-                          marginBottom: '4px',
-                          transition: 'all 0.2s ease',
-                          userSelect: 'none'
-                        }}
+                        className={`swipe-track-blue ${isStandSwiping ? 'swipe-track-blue-active' : ''}`}
+                        onMouseMove={handleStandSwipeMove}
+                        onMouseUp={handleStandSwipeEnd}
+                        onMouseLeave={handleStandSwipeEnd}
+                        onTouchMove={handleStandSwipeMove}
+                        onTouchEnd={handleStandSwipeEnd}
+                        style={{ width: '100%' }}
                       >
-                        🛑 Mantener para Plantar
+                        <div 
+                          className="swipe-handle-blue"
+                          onMouseDown={handleStandSwipeStart}
+                          onTouchStart={handleStandSwipeStart}
+                          style={{ left: `${5 + standSwipeX}px` }}
+                        >
+                          →
+                        </div>
+                        <span style={{ fontSize: '0.65rem', pointerEvents: 'none' }}>
+                          {isStandSwiping ? 'Suelte al final...' : 'Deslizar para Plantarse'}
+                        </span>
                       </div>
                     )}
 
@@ -1086,11 +1042,11 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
                 <span className="gesture-desc">Pedir (Hit) en tapete</span>
               </div>
               <div className="gesture-legend-item">
-                <span className="gesture-icon-badge">Mantener Presionado</span>
+                <span className="gesture-icon-badge">Deslizar Barra (Azul)</span>
                 <span className="gesture-desc">Plantarse (Stand)</span>
               </div>
               <div className="gesture-legend-item">
-                <span className="gesture-icon-badge">Deslizar Barra</span>
+                <span className="gesture-icon-badge">Deslizar Barra (Roja)</span>
                 <span className="gesture-desc">Rendirse (Surrender)</span>
               </div>
             </div>
