@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { AlertCircle, CheckCircle, RotateCcw, Info, Plus, Minus, FileText } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { AlertCircle, CheckCircle, RotateCcw, Plus, Minus, FileText } from 'lucide-react';
 import { Hand, Deck, getActionFromStrategy } from '../../simulator/core/BlackjackEngine.ts';
 import { Chromosome } from '../../simulator/core/GeneticEngine.ts';
 import { RulesConfig } from '../../simulator/core/defaultStrategy.ts';
@@ -108,7 +108,7 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
   const [isLegendOpen, setIsLegendOpen] = useState(true);
   const [ripples, setRipples] = useState<{ id: number; x: number; y: number }[]>([]);
   const [holdProgress, setHoldProgress] = useState(0); // 0 a 100
-  const [holdInterval, setHoldInterval] = useState<any>(null);
+  const holdIntervalRef = useRef<any>(null);
   
   const [swipeStart, setSwipeStart] = useState(0);
   const [swipeX, setSwipeX] = useState(0);
@@ -117,11 +117,11 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
   // Limpieza del intervalo de hold al desmontar
   useEffect(() => {
     return () => {
-      if (holdInterval) clearInterval(holdInterval);
+      if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
     };
-  }, [holdInterval]);
+  }, []);
 
-  // Doble click en el tapete para Pedir (Hit)
+  // Doble clic en el tapete para Pedir (Hit)
   const handleTableDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (gameState !== 'playing') return;
     if (insuranceOffered) return;
@@ -141,34 +141,35 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
   };
 
   // Click sostenido arriba de las cartas para Plantarse (Stand)
-  const handleHoldStart = () => {
+  const handleHoldStart = (e: React.MouseEvent | React.TouchEvent) => {
     if (gameState !== 'playing') return;
     if (insuranceOffered) return;
+    e.preventDefault(); // Previene selección de texto/arrastre por defecto del navegador en escritorios
 
-    if (holdInterval) clearInterval(holdInterval);
+    if (holdIntervalRef.current) clearInterval(holdIntervalRef.current);
 
     let progress = 0;
     setHoldProgress(0);
 
-    const interval = setInterval(() => {
+    holdIntervalRef.current = setInterval(() => {
       progress += 8;
       if (progress >= 100) {
-        clearInterval(interval);
-        setHoldInterval(null);
+        if (holdIntervalRef.current) {
+          clearInterval(holdIntervalRef.current);
+          holdIntervalRef.current = null;
+        }
         setHoldProgress(0);
         handlePlayerAction('S');
       } else {
         setHoldProgress(progress);
       }
     }, 50);
-
-    setHoldInterval(interval);
   };
 
   const handleHoldEnd = () => {
-    if (holdInterval) {
-      clearInterval(holdInterval);
-      setHoldInterval(null);
+    if (holdIntervalRef.current) {
+      clearInterval(holdIntervalRef.current);
+      holdIntervalRef.current = null;
     }
     setHoldProgress(0);
   };
@@ -703,7 +704,7 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
         backgroundImage: 'radial-gradient(circle, #0e4c2b 0%, #031b0f 100%)',
         border: '3px solid var(--felt-border)',
         boxShadow: 'inset 0 0 100px rgba(0,0,0,0.8), 0 8px 30px rgba(0,0,0,0.5)',
-        minHeight: '560px',
+        minHeight: '500px',
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
@@ -1070,7 +1071,7 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
       </section>
 
       {/* Panel de Estadísticas, Modos e Información Científica */}
-      <aside style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <aside style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         
         {/* Leyenda de Gestos de Casino */}
         <div className="gesture-legend-panel">
@@ -1097,16 +1098,16 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
         </div>
 
         {/* Selector de Modo de Práctica */}
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <h3 style={{ color: 'var(--gold)', fontSize: '1.1rem' }}>🎮 Modo de Práctica</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 16px' }}>
+          <h3 style={{ color: 'var(--gold)', fontSize: '1.05rem' }}>🎮 Modo de Práctica</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '2px' }}>
             <button 
               onClick={() => {
                 setPracticeMode('ensayo_error');
                 setTrainerMsg({ type: 'info', text: 'Modo Ensayo y Error activado. Recibe correcciones de Pavlov inmediatas.' });
               }}
               className={`casino-btn ${practiceMode === 'ensayo_error' ? 'btn-deal' : ''}`}
-              style={practiceMode !== 'ensayo_error' ? { background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.75rem' } : { fontSize: '0.75rem' }}
+              style={practiceMode !== 'ensayo_error' ? { background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.75rem', padding: '8px 12px' } : { fontSize: '0.75rem', padding: '8px 12px' }}
             >
               Ensayo & Error
             </button>
@@ -1116,7 +1117,7 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
                 setTrainerMsg(null);
               }}
               className={`casino-btn ${practiceMode === 'estudio' ? 'btn-deal' : ''}`}
-              style={practiceMode !== 'estudio' ? { background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.75rem' } : { fontSize: '0.75rem' }}
+              style={practiceMode !== 'estudio' ? { background: 'rgba(255,255,255,0.05)', color: '#fff', fontSize: '0.75rem', padding: '8px 12px' } : { fontSize: '0.75rem', padding: '8px 12px' }}
             >
               Modo Estudio
             </button>
@@ -1124,20 +1125,20 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
         </div>
 
         {/* Panel de Estrategia Activa y Capital */}
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px 16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ color: 'var(--gold)', fontSize: '1.1rem' }}>📈 Estrategia Activa</h3>
+            <h3 style={{ color: 'var(--gold)', fontSize: '1.05rem' }}>📈 Estrategia Activa</h3>
             <button onClick={handleResetTrainer} title="Reiniciar capital y errores" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-              <RotateCcw size={15} />
+              <RotateCcw size={14} />
             </button>
           </div>
           
-          <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>
-            <div style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.9rem' }}>{stratInfo.title}</div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{stratInfo.desc}</div>
+          <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '6px' }}>
+            <div style={{ fontWeight: 'bold', color: '#fff', fontSize: '0.85rem' }}>{stratInfo.title}</div>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>{stratInfo.desc}</div>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.78rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Capital Total:</span>
               <span style={{ color: '#fff', fontWeight: 'bold' }}>${bankroll.toLocaleString()} COP</span>
@@ -1156,25 +1157,22 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
 
           {/* Información del Bankroll Recomendado */}
           <div style={{ 
-            fontSize: '0.75rem', 
+            fontSize: '0.7rem', 
             color: 'var(--text-secondary)', 
-            padding: '10px', 
+            padding: '8px 10px', 
             background: 'rgba(0,0,0,0.3)', 
             borderRadius: '6px', 
             borderLeft: '2px solid var(--gold)',
-            marginTop: '5px' 
+            marginTop: '2px' 
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--gold)', fontWeight: 'bold', marginBottom: '2px' }}>
-              <Info size={12} /> Bankroll Ideal Recomendado:
-            </div>
-            Para apostar con unidad base de $2,500 COP, debes iniciar con <strong>{stratInfo.bankroll}</strong>. Esto absorbe el drawdown teórico bajo el peor escenario evolutivo de Monte Carlo.
+            Para apostar con unidad base de $2,500 COP, debes iniciar con <strong>{stratInfo.bankroll}</strong>.
           </div>
         </div>
 
         {/* Panel de Errores y Reporte de Sesión */}
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '12px', flexGrow: 1, minHeight: '180px' }}>
+        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px 16px', flexGrow: 1, minHeight: '140px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3 style={{ color: 'var(--gold)', fontSize: '1.1rem' }}>📊 Rendimiento</h3>
+            <h3 style={{ color: 'var(--gold)', fontSize: '1.05rem' }}>📊 Rendimiento</h3>
             <button 
               onClick={() => setShowReportModal(true)} 
               disabled={totalPlays === 0}
@@ -1185,7 +1183,7 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
             </button>
           </div>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.8rem' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.78rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Decisiones Evaluadas:</span>
               <span style={{ color: '#fff', fontWeight: 'bold' }}>{totalPlays}</span>
@@ -1205,10 +1203,10 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
           {/* Historial de logs del tutor */}
           <div style={{
             borderTop: '1px solid rgba(255,255,255,0.05)',
-            paddingTop: '8px',
+            paddingTop: '6px',
             overflowY: 'auto',
-            maxHeight: '120px',
-            fontSize: '0.7rem',
+            maxHeight: '90px',
+            fontSize: '0.68rem',
             fontFamily: 'JetBrains Mono, monospace',
             color: '#5a7062'
           }}>

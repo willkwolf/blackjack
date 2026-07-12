@@ -411,7 +411,7 @@ h1, h2, h3, h4 {
   color: var(--text-secondary);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  margin-bottom: 20px;
+  margin-bottom: 0px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -447,7 +447,7 @@ h1, h2, h3, h4 {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 10px;
+  padding: 5px 8px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.03);
   border-radius: 8px;

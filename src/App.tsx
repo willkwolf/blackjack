@@ -69,13 +69,13 @@ function App() {
   }
 
   return (
-    <div className="container" style={{ maxWidth: '1400px', margin: '0 auto', padding: '20px' }}>
+    <div className="container" style={{ maxWidth: '1400px', margin: '0 auto', padding: '15px' }}>
       <header style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: '20px',
-        marginBottom: '30px',
+        padding: '12px 20px',
+        marginBottom: '15px',
         background: 'rgba(5, 20, 12, 0.5)',
         backdropFilter: 'blur(10px)',
         border: '1px solid rgba(212, 175, 55, 0.15)',
