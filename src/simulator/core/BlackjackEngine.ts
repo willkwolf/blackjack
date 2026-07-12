@@ -158,6 +158,12 @@ export function getActionFromStrategy(
         return playerValue >= 18 ? 'S' : 'H';
       }
     }
+    // Si la acción es Rendirse (SU) pero no se puede, resolver como Hit (H) o Stand (S)
+    if (action === 'SU') {
+      if (!rules.surrenderAllowed || !playerHand.canDouble() || playerHand.isSplitHand) {
+        return playerValue >= 18 ? 'S' : 'H';
+      }
+    }
     return action || (playerValue >= 17 ? 'S' : 'H');
   }
 
@@ -280,6 +286,7 @@ export function playRound(
           // Crear nueva mano para el split
           const splitCard = hand.cards.pop()!;
           const newHand = new Hand(baseBet);
+          hand.isSplitHand = true;
           newHand.isSplitHand = true;
           newHand.addCard(splitCard);
 

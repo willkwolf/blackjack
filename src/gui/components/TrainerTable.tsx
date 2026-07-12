@@ -462,6 +462,7 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
       // Split (Dividir)
       const splitCard = currentHand.cards.pop()!;
       const newHand = new Hand(currentHand.bet);
+      currentHand.isSplitHand = true;
       newHand.isSplitHand = true;
       newHand.addCard(splitCard);
 
@@ -756,7 +757,7 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
               </button>
               <button 
                 onClick={() => handlePlayerAction('SU')} 
-                disabled={!activeHand.canDouble() || activeHand.isSplitHand} 
+                disabled={!rules.surrenderAllowed || !activeHand.canDouble() || activeHand.isSplitHand} 
                 className="casino-btn btn-surrender"
               >
                 Surrender

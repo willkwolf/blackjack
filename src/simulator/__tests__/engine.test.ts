@@ -206,5 +206,42 @@ describe('Blackjack Engine Tests', () => {
       const action = getActionFromStrategy(hand, new Card('9', '♥'), mockStrategy, DEFAULT_RULES);
       expect(action).toBe('S'); // Stand, never Double
     });
+
+    it('should fallback from surrender (SU) to hit or stand when surrender is not allowed', () => {
+      // 1. Surrender rules disabled
+      const hand = new Hand(2500);
+      hand.addCard(new Card('10', '♠'));
+      hand.addCard(new Card('6', '♦')); // total 16
+      
+      const customStrategy = {
+        ...mockStrategy,
+        hard: {
+          ...mockStrategy.hard,
+          16: Array(10).fill('SU') // Recomienda surrender en todos los casos
+        }
+      };
+
+      const rulesNoSurrender = { ...DEFAULT_RULES, surrenderAllowed: false };
+      const action1 = getActionFromStrategy(hand, new Card('10', '♥'), customStrategy, rulesNoSurrender);
+      expect(action1).toBe('H'); // Debe caer en HIT porque surrender está deshabilitado en reglas
+
+      // 2. Surrender en mano con 3 cartas
+      const hand3Cards = new Hand(2500);
+      hand3Cards.addCard(new Card('8', '♠'));
+      hand3Cards.addCard(new Card('5', '♦'));
+      hand3Cards.addCard(new Card('3', '♣')); // total 16 con 3 cartas
+      
+      const action2 = getActionFromStrategy(hand3Cards, new Card('10', '♥'), customStrategy, DEFAULT_RULES);
+      expect(action2).toBe('H'); // Debe caer en HIT porque tiene 3 cartas
+
+      // 3. Surrender en mano dividida (split)
+      const splitHand = new Hand(2500);
+      splitHand.isSplitHand = true;
+      splitHand.addCard(new Card('10', '♠'));
+      splitHand.addCard(new Card('6', '♦')); // total 16 en split
+      
+      const action3 = getActionFromStrategy(splitHand, new Card('10', '♥'), customStrategy, DEFAULT_RULES);
+      expect(action3).toBe('H'); // Debe caer en HIT porque es mano split
+    });
   });
 });
