@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle, RotateCcw, Plus, Minus, FileText } from 'lucide-react';
-import { Hand, Deck, getActionFromStrategy } from '../../simulator/core/BlackjackEngine.ts';
+import { Hand, Deck, Card, getActionFromStrategy } from '../../simulator/core/BlackjackEngine.ts';
 import { Chromosome } from '../../simulator/core/GeneticEngine.ts';
 import { RulesConfig } from '../../simulator/core/defaultStrategy.ts';
+import { saveTrainerDecision, getWeakestHands, getWeakestHandsForSession } from '../../db/database.ts';
 import { getNextBet } from '../../simulator/core/MonteCarloSimulation.ts';
 
 interface TrainerTableProps {
@@ -64,7 +65,110 @@ const ChipStack = ({ bet }: { bet: number }) => {
   );
 };
 
-export default function TrainerTable({ strategy, rules, strategySource }: TrainerTableProps) {
+// Lista predeterminada de manos difíciles comunes para entrenamiento de modo estudio
+const DEFAULT_WEAK_HANDS = [
+  { player_value: 16, player_hand_type: 'hard', dealer_upcard: '10' },
+  { player_value: 12, player_hand_type: 'hard', dealer_upcard: '3' },
+  { player_value: 15, player_hand_type: 'hard', dealer_upcard: '10' },
+  { player_value: 11, player_hand_type: 'hard', dealer_upcard: '10' },
+  { player_value: 13, player_hand_type: 'hard', dealer_upcard: '4' },
+  { player_value: 16, player_hand_type: 'hard', dealer_upcard: '8' },
+  { player_value: 12, player_hand_type: 'hard', dealer_upcard: '9' },
+  { player_value: 14, player_hand_type: 'hard', dealer_upcard: '5' },
+  { player_value: 15, player_hand_type: 'hard', dealer_upcard: '7' },
+  { player_value: 13, player_hand_type: 'hard', dealer_upcard: '3' }
+];
+
+function getRanksForValue(value: number, type: string): string[] {
+  if (type === 'pair') {
+    if (value === 22) return ['A', 'A'];
+    const half = value / 2;
+    const rank = half === 10 ? '10' : String(half);
+    return [rank, rank];
+  }
+  if (type === 'soft') {
+    const otherValue = value - 11;
+    const rank = otherValue === 10 ? '10' : String(otherValue);
+    return ['A', rank];
+  }
+  // Hard hands: encontrar dos rangos de 2 a 10 que sumen 'value'
+  for (let val1 = Math.min(10, value - 2); val1 >= 2; val1--) {
+    const val2 = value - val1;
+    if (val2 >= 2 && val2 <= 10) {
+      const rank1 = val1 === 10 ? '10' : String(val1);
+      const rank2 = val2 === 10 ? '10' : String(val2);
+      return [rank1, rank2];
+    }
+  }
+  return ['10', '6']; // fallback para 16
+}
+
+function getDealerRank(upcardValue: string): string[] {
+  if (upcardValue === 'A') return ['A'];
+  if (upcardValue === '10' || upcardValue === 'J' || upcardValue === 'Q' || upcardValue === 'K') {
+    return ['10', 'J', 'Q', 'K'];
+  }
+  return [upcardValue];
+}
+
+function extractCardOfRanks(cards: Card[], allowedRanks: string[]): Card | null {
+  for (let i = 0; i < cards.length; i++) {
+    if (allowedRanks.includes(cards[i].rank)) {
+      const card = cards[i];
+      cards.splice(i, 1);
+      return card;
+    }
+  }
+  return null;
+}
+
+function stackShoe(deck: Deck, weakHands: any[]) {
+  if (!weakHands || weakHands.length === 0) return;
+
+  const cards = [...deck.cards];
+  const allStackedCards: Card[] = [];
+
+  // Apilamos hasta 8 rondas seguidas con debilidades detectadas (o las disponibles)
+  const roundsToStack = Math.min(8, weakHands.length);
+
+  // Procesamos en orden inverso LIFO: las primeras rondas quedan arriba del mazo
+  for (let r = roundsToStack - 1; r >= 0; r--) {
+    const weakHand = weakHands[r];
+    const playerRanks = getRanksForValue(weakHand.player_value, weakHand.player_hand_type);
+    const dealerRanks = getDealerRank(weakHand.dealer_upcard);
+
+    const p1 = extractCardOfRanks(cards, [playerRanks[0]]);
+    const dUp = extractCardOfRanks(cards, dealerRanks);
+    const p2 = extractCardOfRanks(cards, [playerRanks[1]]);
+    
+    let dHole = null;
+    if (cards.length > 0) {
+      const idx = Math.floor(Math.random() * cards.length);
+      dHole = cards[idx];
+      cards.splice(idx, 1);
+    }
+
+    if (p1 && dUp && p2 && dHole) {
+      allStackedCards.push(dHole, p2, dUp, p1);
+    } else {
+      if (p1) cards.push(p1);
+      if (dUp) cards.push(dUp);
+      if (p2) cards.push(p2);
+      if (dHole) cards.push(dHole);
+    }
+  }
+
+  // Barajar aleatoriamente el resto de las cartas
+  for (let i = cards.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [cards[i], cards[j]] = [cards[j], cards[i]];
+  }
+
+  deck.cards = [...cards, ...allStackedCards];
+  deck.cardsDealt = 0;
+}
+
+export default function TrainerTable({ db, strategy, rules, strategySource }: TrainerTableProps) {
   // Configuración del Capital y Apuesta
   const [bankroll, setBankroll] = useState(1000000); // 1,000,000 COP por defecto (bankroll ideal)
   const [betSize, setBetSize] = useState(2500); // Unidad mínima de apuesta
@@ -96,6 +200,15 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
   const [errorCount, setErrorCount] = useState(0);
   const [errorsList, setErrorsList] = useState<PlayError[]>([]);
   const [showReportModal, setShowReportModal] = useState(false);
+
+  // Estados para Sesión de Estudio de 15 Minutos (Timer y Re-entreno)
+  const [studySessionActive, setStudySessionActive] = useState(false);
+  const [studyTimeLeft, setStudyTimeLeft] = useState(900); // 900s = 15 minutos
+  const [studySessionId, setStudySessionId] = useState<string | null>(null);
+  const [studyTotalPlays, setStudyTotalPlays] = useState(0);
+  const [studyErrorCount, setStudyErrorCount] = useState(0);
+  const [showStudyEndModal, setShowStudyEndModal] = useState(false);
+  const [studySessionSummary, setStudySessionSummary] = useState<any[]>([]);
 
   // Registro del tutor de entrenamiento (mensajes inmediatos)
   const [trainerMsg, setTrainerMsg] = useState<{ type: 'success' | 'warning' | 'info'; text: string } | null>({
@@ -193,11 +306,83 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
     setSwipeX(0);
   };
 
+  const initializeDeck = () => {
+    if (!db) return;
+    const d = new Deck(rules.decks);
+    if (practiceMode === 'estudio') {
+      const weaknesses = getWeakestHands(db, 12);
+      const handsToStack = weaknesses.length > 0 ? weaknesses : DEFAULT_WEAK_HANDS;
+      stackShoe(d, handsToStack);
+      addLog('Tutor: Zapato re-ordenado y cargado con tus manos débiles para optimizar el entreno.');
+    } else {
+      d.reset();
+    }
+    setDeck(d);
+  };
+
   // Inicializar baraja
   useEffect(() => {
+    initializeDeck();
+  }, [rules.decks, practiceMode]);
+
+  // Iniciar Sesión de Estudio de 15 minutos
+  const startStudySession = () => {
+    const sessId = `session_${Date.now()}`;
+    setStudySessionId(sessId);
+    setStudyTimeLeft(900); // 15 minutos en segundos
+    setStudyTotalPlays(0);
+    setStudyErrorCount(0);
+    setStudySessionActive(true);
+
     const d = new Deck(rules.decks);
+    const weaknesses = getWeakestHands(db, 12);
+    const handsToStack = weaknesses.length > 0 ? weaknesses : DEFAULT_WEAK_HANDS;
+    stackShoe(d, handsToStack);
     setDeck(d);
-  }, [rules.decks]);
+
+    setTrainerMsg({
+      type: 'info',
+      text: '🎬 Sesión de estudio de 15 minutos iniciada. Zapato adaptado según tus debilidades.'
+    });
+    addLog('Tutor: Sesión de estudio iniciada. Zapato re-ordenado según tus debilidades.');
+  };
+
+  // Finalizar Sesión de Estudio
+  const endStudySession = () => {
+    setStudySessionActive(false);
+    if (studySessionId) {
+      const summary = getWeakestHandsForSession(db, studySessionId, 3);
+      setStudySessionSummary(summary);
+      setShowStudyEndModal(true);
+      playSound('success');
+    }
+    setTrainerMsg({
+      type: 'info',
+      text: '⏱️ Sesión de estudio terminada. Revisa el reporte de re-entreno.'
+    });
+    addLog('Tutor: Sesión de estudio terminada.');
+  };
+
+  // Timer de 15 minutos para la sesión de estudio
+  useEffect(() => {
+    let timerInterval: any = null;
+    if (studySessionActive && studyTimeLeft > 0) {
+      timerInterval = setInterval(() => {
+        setStudyTimeLeft(prev => {
+          if (prev <= 1) {
+            clearInterval(timerInterval);
+            // Ejecutar en el siguiente tick para evitar race conditions de React state updates
+            setTimeout(() => endStudySession(), 10);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => {
+      if (timerInterval) clearInterval(timerInterval);
+    };
+  }, [studySessionActive, studyTimeLeft, studySessionId]);
 
   // Sintetizador de sonido con Web Audio API (evita assets rotos y CORS)
   const playSound = (type: 'success' | 'error') => {
@@ -264,7 +449,25 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
 
   // Ejecuta la jugada inicial (Repartir)
   const handleDeal = () => {
-    if (!deck) return;
+    // 0. Verificar si el mazo se ha quedado sin cartas suficientes
+    let currentDeck = deck;
+    if (!currentDeck || currentDeck.cards.length < 15) {
+      const d = new Deck(rules.decks);
+      if (practiceMode === 'estudio') {
+        const weaknesses = getWeakestHands(db, 12);
+        const handsToStack = weaknesses.length > 0 ? weaknesses : DEFAULT_WEAK_HANDS;
+        stackShoe(d, handsToStack);
+        setTrainerMsg({
+          type: 'info',
+          text: '🧹 Zapato sin cartas. Se ha re-ordenado y barajado de acuerdo a tus debilidades.'
+        });
+      } else {
+        d.reset();
+      }
+      currentDeck = d;
+      setDeck(d);
+      addLog('Sistema: El zapato se ha quedado sin cartas. Se ha re-ordenado y barajado uno nuevo.');
+    }
 
     // Verificar bankroll suficiente
     if (bankroll < betSize) {
@@ -274,8 +477,30 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
 
     // 1. Evaluar si la apuesta sigue la progresión óptima (DSP)
     const expectedOptimalBet = getNextBet(strategy.betting, bankroll, consecutiveWins, lastRoundResult);
-    if (betSize !== expectedOptimalBet) {
-      // Registrar desvío de apuesta
+    const isBetCorrect = betSize === expectedOptimalBet;
+
+    // Registrar en la sesión de estudio si está activa
+    if (studySessionActive && studySessionId) {
+      setStudyTotalPlays(prev => prev + 1);
+      if (!isBetCorrect) {
+        setStudyErrorCount(prev => prev + 1);
+      }
+      saveTrainerDecision(
+        db,
+        studySessionId,
+        `Apuesta Inicial: $${betSize.toLocaleString()} COP`,
+        'betting',
+        betSize,
+        'N/A',
+        `Apostar $${betSize.toLocaleString()}`,
+        `Apostar $${expectedOptimalBet.toLocaleString()}`,
+        isBetCorrect,
+        `La progresión teórica DSP solicita una apuesta de $${expectedOptimalBet.toLocaleString()} COP para este paso de racha. Desviarse de la progresión expone tu capital a mayor riesgo de ruina.`
+      );
+    }
+
+    if (!isBetCorrect) {
+      // Registrar desvío de apuesta general
       setTotalPlays(prev => prev + 1);
       setErrorCount(prev => prev + 1);
       
@@ -319,10 +544,10 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
     const newPlayerHand = new Hand(betSize);
     const newDealerHand = new Hand(0);
 
-    newPlayerHand.addCard(deck.deal());
-    newDealerHand.addCard(deck.deal()); // Expuesta (0)
-    newPlayerHand.addCard(deck.deal());
-    newDealerHand.addCard(deck.deal()); // Oculta (1)
+    newPlayerHand.addCard(currentDeck.deal());
+    newDealerHand.addCard(currentDeck.deal()); // Expuesta (0)
+    newPlayerHand.addCard(currentDeck.deal());
+    newDealerHand.addCard(currentDeck.deal()); // Oculta (1)
 
     setPlayerHands([newPlayerHand]);
     setActiveHandIdx(0);
@@ -528,18 +753,52 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
 
     // 1. Obtener acción óptima teórica usando RulesConfig completo
     const optimalAction = getActionFromStrategy(currentHand, dealerUpcard, strategy, rules);
+    const isCorrect = action === optimalAction;
+    const explanationText = explainDecision(dealerUpcard.value, optimalAction);
+
+    // Guardar en la sesión de estudio si está activa
+    const handValue = currentHand.getValue();
+    const dealerUpcardStr = dealerUpcard.rank === 'A' ? 'A' : `${dealerUpcard.value}`;
+    const userText = action === 'H' ? 'HIT' : action === 'S' ? 'STAND' : action === 'D' ? 'DOUBLE' : action === 'SU' ? 'SURRENDER' : 'SPLIT';
+    const optText = optimalAction === 'H' ? 'HIT' : optimalAction === 'S' ? 'STAND' : optimalAction === 'D' ? 'DOUBLE' : optimalAction === 'SU' ? 'SURRENDER' : 'SPLIT';
+    
+    let handType: 'hard' | 'soft' | 'pair' = 'hard';
+    if (currentHand.isPair()) {
+      handType = 'pair';
+    } else if (currentHand.isSoft()) {
+      handType = 'soft';
+    }
+    const handDescStr = currentHand.isSoft() ? `Suave ${handValue}` : currentHand.isPair() ? `Par ${currentHand.cards[0].rank}` : `Dura ${handValue}`;
+
+    if (studySessionActive && studySessionId) {
+      setStudyTotalPlays(prev => prev + 1);
+      if (!isCorrect) {
+        setStudyErrorCount(prev => prev + 1);
+      }
+      saveTrainerDecision(
+        db,
+        studySessionId,
+        handDescStr,
+        handType,
+        handValue,
+        dealerUpcardStr,
+        userText,
+        optText,
+        isCorrect,
+        explanationText
+      );
+    }
 
     // 2. Dar retroalimentación de entrenamiento
     setTotalPlays(prev => prev + 1);
-    if (action !== optimalAction) {
+    if (!isCorrect) {
       setErrorCount(prev => prev + 1);
-      const explanationText = explainDecision(dealerUpcard.value, optimalAction);
       
       const playErr: PlayError = {
         handDesc: `Mano: ${currentHand.cards.map(c=>c.rank).join(', ')} (${currentHand.isSoft() ? 'Suave' : 'Dura'} ${currentHand.getValue()})`,
         dealerCard: dealerUpcard.rank === 'A' ? 'A' : `${dealerUpcard.value}`,
-        userChoice: action === 'H' ? 'HIT' : action === 'S' ? 'STAND' : action === 'D' ? 'DOUBLE' : action === 'SU' ? 'SURRENDER' : 'SPLIT',
-        correctChoice: optimalAction === 'H' ? 'HIT' : optimalAction === 'S' ? 'STAND' : optimalAction === 'D' ? 'DOUBLE' : optimalAction === 'SU' ? 'SURRENDER' : 'SPLIT',
+        userChoice: userText,
+        correctChoice: optText,
         explanation: explanationText,
         timestamp: new Date().toLocaleTimeString()
       };
@@ -1080,6 +1339,64 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
           </div>
         </div>
 
+        {/* Panel de Control de Sesión de Estudio de 15 Minutos */}
+        {practiceMode === 'estudio' && (
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '12px 16px', border: '1px solid rgba(212,175,55,0.3)', boxShadow: '0 0 15px rgba(212,175,55,0.1)' }}>
+            <h3 style={{ color: 'var(--gold)', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              ⏱️ Sesión de Estudio (15m)
+            </h3>
+            
+            {!studySessionActive ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.75rem', marginTop: '2px' }}>
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  Practica con barajas adaptativas de re-entreno basadas en tus debilidades matemáticas detectadas.
+                </p>
+                <button 
+                  onClick={startStudySession}
+                  className="casino-btn btn-deal"
+                  style={{ width: '100%', padding: '10px 14px', fontSize: '0.8rem', fontWeight: 'bold' }}
+                >
+                  🎬 Iniciar Sesión de Estudio
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '2px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Tiempo restante:</span>
+                  <span style={{ fontSize: '1.2rem', fontWeight: 'bold', fontFamily: 'monospace', color: 'var(--gold)', textShadow: '0 0 10px rgba(212,175,55,0.4)' }}>
+                    {Math.floor(studyTimeLeft / 60)}:{(studyTimeLeft % 60).toString().padStart(2, '0')}
+                  </span>
+                </div>
+                
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px', background: 'rgba(0,0,0,0.2)', padding: '8px', borderRadius: '6px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Decisiones en sesión:</span>
+                    <span style={{ color: '#fff', fontWeight: 'bold' }}>{studyTotalPlays}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Errores en sesión:</span>
+                    <span style={{ color: studyErrorCount > 0 ? 'var(--red-neon)' : 'var(--green-neon)', fontWeight: 'bold' }}>{studyErrorCount}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>Precisión en sesión:</span>
+                    <span style={{ color: 'var(--gold)', fontWeight: 'bold' }}>
+                      {studyTotalPlays === 0 ? '100.0%' : `${((studyTotalPlays - studyErrorCount) / studyTotalPlays * 100).toFixed(1)}%`}
+                    </span>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={endStudySession}
+                  className="casino-btn"
+                  style={{ width: '100%', padding: '8px 12px', background: 'rgba(255,23,68,0.15)', color: 'var(--red-neon)', border: '1px solid var(--red-neon)', fontSize: '0.75rem' }}
+                >
+                  🛑 Terminar Sesión
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Panel de Estrategia Activa y Capital */}
         <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '12px 16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1257,6 +1574,108 @@ export default function TrainerTable({ strategy, rules, strategySource }: Traine
 
             <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px' }}>
               ℹ️ Este reporte compara tus decisiones empíricas con el óptimo derivado de los papers de Marino & Taylor (2014) y Buramdoyal (2023) para eliminar desviaciones que desgastan tu capital a largo plazo.
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Fin de Sesión de Estudio */}
+      {showStudyEndModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.85)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 99
+        }}>
+          <div className="glass-panel" style={{
+            width: '650px',
+            maxHeight: '85vh',
+            overflowY: 'auto',
+            border: '2px solid var(--gold)',
+            boxShadow: '0 8px 32px rgba(212,175,55,0.25)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
+            padding: '25px'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '10px' }}>
+              <h3 style={{ color: 'var(--gold)', fontSize: '1.3rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                ⏱️ Sesión de Estudio Concluida
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowStudyEndModal(false);
+                  initializeDeck(); // Re-inicia y apila el zapato basado en las nuevas debilidades
+                }} 
+                className="casino-btn btn-deal" 
+                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+              >
+                Listo para Re-entrenar
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Precisión de Sesión</div>
+                <div style={{ fontSize: '1.8rem', color: 'var(--green-neon)', fontWeight: 'bold', marginTop: '4px' }}>
+                  {studyTotalPlays === 0 ? '100.0%' : `${((studyTotalPlays - studyErrorCount) / studyTotalPlays * 100).toFixed(1)}%`}
+                </div>
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Decisiones</div>
+                <div style={{ fontSize: '1.8rem', color: '#fff', fontWeight: 'bold', marginTop: '4px' }}>{studyTotalPlays}</div>
+              </div>
+              <div style={{ background: 'rgba(255,255,255,0.02)', padding: '12px', borderRadius: '8px', textAlign: 'center', border: '1px solid rgba(255,255,255,0.05)' }}>
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Errores Registrados</div>
+                <div style={{ fontSize: '1.8rem', color: studyErrorCount > 0 ? 'var(--red-neon)' : 'var(--green-neon)', fontWeight: 'bold', marginTop: '4px' }}>{studyErrorCount}</div>
+              </div>
+            </div>
+
+            <div>
+              <h4 style={{ color: 'var(--gold)', fontSize: '1rem', marginBottom: '10px' }}>
+                🧠 Manos Críticas a Reforzar (Análisis SQL de Fuga de Valor)
+              </h4>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '280px', overflowY: 'auto' }}>
+                {studySessionSummary.length === 0 ? (
+                  <div style={{ color: 'var(--green-neon)', fontStyle: 'italic', fontSize: '0.85rem', background: 'rgba(0, 230, 118, 0.05)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(0, 230, 118, 0.15)' }}>
+                    🎉 ¡Felicidades! Completaste los 15 minutos sin errores matemáticos. Has ejecutado la estrategia básica DSP con una precisión perfecta.
+                  </div>
+                ) : (
+                  studySessionSummary.map((err, idx) => (
+                    <div key={idx} style={{
+                      background: 'rgba(255, 23, 68, 0.05)',
+                      border: '1px solid rgba(255, 23, 68, 0.15)',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '5px'
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+                        <span style={{ color: '#fff' }}>Mano: {err.player_hand} vs Dealer {err.dealer_upcard}</span>
+                        <span style={{ color: 'var(--red-neon)' }}>Falla en {err.errors} de {err.total_plays} jugadas</span>
+                      </div>
+                      <div>
+                        Jugaste: <strong style={{ color: 'var(--red-neon)' }}>{err.user_decision}</strong> | 
+                        Óptimo: <strong style={{ color: 'var(--green-neon)' }}>{err.optimal_decision}</strong>
+                      </div>
+                      <p style={{ color: 'var(--text-secondary)', marginTop: '4px', lineHeight: '1.3', fontSize: '0.75rem' }}>
+                        <strong>Explicación Científica:</strong> {err.explanation}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: '10px', background: 'rgba(212,175,55,0.05)', padding: '10px', borderRadius: '6px', borderLeft: '3px solid var(--gold)' }}>
+              🎯 <strong>Zapato de Re-entreno Inteligente Preparado:</strong> En tu siguiente sesión, las barajas se han ordenado físicamente en LIFO para entregarte con mayor probabilidad de reparto exactamente estas situaciones. ¡Entrenamiento de fuga focalizado!
             </div>
           </div>
         </div>

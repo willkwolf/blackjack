@@ -121,6 +121,20 @@ function createTables(db: any) {
       implementation_notes TEXT,
       tested BOOLEAN DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS trainer_decisions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      session_id TEXT NOT NULL,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      player_hand TEXT NOT NULL,
+      player_hand_type TEXT NOT NULL,
+      player_value INTEGER NOT NULL,
+      dealer_upcard TEXT NOT NULL,
+      user_decision TEXT NOT NULL,
+      optimal_decision TEXT NOT NULL,
+      is_correct INTEGER NOT NULL,
+      explanation TEXT NOT NULL
+    );
   `);
 }
 
@@ -313,5 +327,112 @@ function seedResearchPapers(db: any) {
       db.run('ROLLBACK');
     } catch (_) {}
     console.error('Error al sembrar papers en base de datos:', error);
+  }
+}
+
+// Guarda una decisión individual del usuario durante las sesiones de entrenamiento
+export function saveTrainerDecision(
+  db: any,
+  sessionId: string,
+  playerHand: string,
+  playerHandType: string,
+  playerValue: number,
+  dealerUpcard: string,
+  userDecision: string,
+  optimalDecision: string,
+  isCorrect: boolean,
+  explanation: string
+) {
+  if (!db) return;
+  try {
+    db.run(
+      `INSERT INTO trainer_decisions (session_id, player_hand, player_hand_type, player_value, dealer_upcard, user_decision, optimal_decision, is_correct, explanation)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        sessionId,
+        playerHand,
+        playerHandType,
+        playerValue,
+        dealerUpcard,
+        userDecision,
+        optimalDecision,
+        isCorrect ? 1 : 0,
+        explanation
+      ]
+    );
+  } catch (e) {
+    console.error('Error al guardar decisión del entrenador:', e);
+  }
+}
+
+// Retorna las manos con mayor tasa de error basándose en el historial de sesiones
+export function getWeakestHands(db: any, limit = 10): any[] {
+  if (!db) return [];
+  try {
+    const res = db.exec(`
+      SELECT 
+        player_hand, 
+        player_hand_type, 
+        player_value, 
+        dealer_upcard,
+        COUNT(*) as total_plays,
+        SUM(CASE WHEN is_correct = 0 THEN 1 ELSE 0 END) as errors,
+        (SUM(CASE WHEN is_correct = 0 THEN 1 ELSE 0 END) * 1.0 / COUNT(*)) as error_rate
+      FROM trainer_decisions
+      GROUP BY player_hand, player_hand_type, player_value, dealer_upcard
+      HAVING errors > 0
+      ORDER BY error_rate DESC, errors DESC, total_plays DESC
+      LIMIT ?
+    `, [limit]);
+
+    if (res.length === 0) return [];
+    const columns = res[0].columns;
+    return res[0].values.map((row: any[]) => {
+      const obj: any = {};
+      columns.forEach((col: string, idx: number) => {
+        obj[col] = row[idx];
+      });
+      return obj;
+    });
+  } catch (e) {
+    console.error('Error al consultar debilidades del jugador:', e);
+    return [];
+  }
+}
+
+// Retorna las peores decisiones tomadas en una sesión de estudio específica
+export function getWeakestHandsForSession(db: any, sessionId: string, limit = 5): any[] {
+  if (!db) return [];
+  try {
+    const res = db.exec(`
+      SELECT 
+        player_hand, 
+        dealer_upcard,
+        user_decision,
+        optimal_decision,
+        COUNT(*) as total_plays,
+        SUM(CASE WHEN is_correct = 0 THEN 1 ELSE 0 END) as errors,
+        (SUM(CASE WHEN is_correct = 0 THEN 1 ELSE 0 END) * 1.0 / COUNT(*)) as error_rate,
+        explanation
+      FROM trainer_decisions
+      WHERE session_id = ?
+      GROUP BY player_hand, dealer_upcard, user_decision, optimal_decision, explanation
+      HAVING errors > 0
+      ORDER BY error_rate DESC, errors DESC
+      LIMIT ?
+    `, [sessionId, limit]);
+
+    if (res.length === 0) return [];
+    const columns = res[0].columns;
+    return res[0].values.map((row: any[]) => {
+      const obj: any = {};
+      columns.forEach((col: string, idx: number) => {
+        obj[col] = row[idx];
+      });
+      return obj;
+    });
+  } catch (e) {
+    console.error('Error al consultar debilidades de la sesión:', e);
+    return [];
   }
 }
